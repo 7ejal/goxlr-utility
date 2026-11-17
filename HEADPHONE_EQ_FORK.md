@@ -1,0 +1,78 @@
+# 20-band stereo headphone EQ lab — GoXLR Utility fork
+
+This is a fork-only feature, not part of the official upstream utility.
+
+Open the GoXLR Utility daemon's local web page and select Headphone EQ Lab,
+or navigate directly to:
+
+http://127.0.0.1:14564/headphone-eq/index.html
+
+The editor is embedded within daemon/web-content and does not require
+deploying a separate web service. Existing GoXLR functionality is unchanged.
+
+## Implemented and tested
+
+- Twenty 48 kHz parametric peaking EQ filters per stereo channel with linked
+  and independent L/R editing, gain, frequency and Q controls.
+- Presets, custom profile JSON export/import, browser-local persistence,
+  simulated frequency-response curve and configurable automatic headroom.
+- Output as an Equalizer APO text configuration for selected Windows
+  playback endpoints (Game, Music, Chat, System, Sample).
+- Output as the 988-byte GXEQ v1 DATA-ONLY research coefficient bank, built
+  from signed Q3.21 peaking filters, per-band enable flags, Q1.23 preamp and
+  CRC-32.
+- The GXEQ output was checked byte-for-byte against the 20-band Python
+  coefficient compiler in the canonical GoXLR firmware research root using a
+  boosted asymmetric stereo profile. SHA256:
+  9c8910c1fe50a58258acaf3c6ab5375320c09a62064bb3fbf43d114dbfb898ee.
+- Read-only GetStatus integration to show whether the local GoXLR daemon
+  sees a device. This function sends no routing or DSP parameter writes.
+
+## Important: what this does *not* do
+
+The stock GoXLR 1.5.1.901 firmware has not been proven to support a safe
+headphone-only postmix DSP EQ hook. The physical headphone DAC buffer, stream
+isolation, real DSP free cycles, USB-to-DSP coefficient transport and
+failed-flash recovery have not been verified. Therefore the editor includes
+no device DSP apply or flash controls.
+
+Equalizer APO is NOT a workaround for hardware headphone-only isolation.
+It processes selected Windows playback endpoints before GoXLR hardware routing.
+Those same sources may contribute to Broadcast Mix and stream, and analog
+Line-In, Console and some exclusive/ASIO/WASAPI audio are not affected.
+If you need EQ only for the physical headphones, do not treat the APO export
+as a verified solution.
+
+The .gxeq output file is NOT flashable. Never submit it to any updater.
+
+## Windows endpoint configuration
+
+1. Install Equalizer APO separately and use its Configurator to attach it
+   to the actual GoXLR Windows playback endpoints you want to modify.
+2. Select endpoints in EQ Lab and export the .txt file.
+3. Open that export in Equalizer APO Configuration Editor or include it in
+   an APO configuration you control. This editor does not install drivers or
+   rewrite any system audio configuration.
+4. Verify each endpoint is processed. Check Broadcast Mix/stream too,
+   because this mode does not isolate the physical headphone output.
+
+## Reproduction on main-server
+
+Run from the canonical research project:
+
+    cd /root/goxlr-research-continuation-2026-11-17/goxlr-utility-fork
+    node --check daemon/web-content/headphone-eq/eq-core.mjs
+    node --check daemon/web-content/headphone-eq/app.mjs
+    node --test headphone-eq-tests/eq-core.test.mjs
+    cargo fmt --all -- --check
+
+The compiled web assets are embedded by the existing GoXLR daemon via
+its static-file handler; no daemon API contract changed.
+
+The verified research lives in ../eq_20band_research_2026-11-17.
+The separate Attune project (https://github.com/SeayInsights/attune) was
+consulted for Equalizer APO endpoint conventions. No Attune source code
+was copied into the feature implementation.
+
+Official upstream contribution policy: this feature branch is for the
+user's own fork, not an upstream contribution to GoXLR-on-Linux.

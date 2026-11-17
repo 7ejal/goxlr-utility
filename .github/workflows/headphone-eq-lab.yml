@@ -1,0 +1,29 @@
+name: Headphone EQ Lab (offline safety / compatibility)
+on:
+  push:
+    paths:
+      - 'daemon/web-content/headphone-eq/**'
+      - 'daemon/web-content/index.html'
+      - 'headphone-eq-tests/**'
+      - '.github/workflows/headphone-eq-lab.yml'
+  pull_request:
+    paths:
+      - 'daemon/web-content/headphone-eq/**'
+      - 'daemon/web-content/index.html'
+      - 'headphone-eq-tests/**'
+      - '.github/workflows/headphone-eq-lab.yml'
+jobs:
+  offline-eq-model:
+    name: Original 20-band compiler parity and safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JS syntax
+        run: |
+          node --check daemon/web-content/headphone-eq/eq-core.mjs
+          node --check daemon/web-content/headphone-eq/app.mjs
+      - name: Offline EQ regression and Python compiler parity fixture
+        run: node --test headphone-eq-tests/eq-core.test.mjs
