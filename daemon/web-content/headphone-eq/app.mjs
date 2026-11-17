@@ -43,7 +43,8 @@ function drawTable(){
   bands.forEach((band,i)=>{
     const row=document.createElement("div");
     row.className="bandrow";row.dataset.row=i;
-    row.innerHTML='<div class="freqrow"><span class="bandnum">'+(i+1)+'</span><span>'+Math.round(band.freq)+' Hz</span></div>'
+    row.innerHTML='<div class="freqrow"><span class="bandnum">'+(i+1)+'</span>'
+      +'<input aria-label="Band '+(i+1)+' frequency in hertz" data-field="freq" type="number" min="20" max="20000" step="1" value="'+band.freq+'"><span>Hz</span></div>'
       +'<div class="gainrow"><input aria-label="Band '+(i+1)+' gain" data-field="gain" type="range" min="-18" max="18" step=".5" value="'+band.gain+'">'
       +'<span class="value">'+(band.gain>0?"+":"")+band.gain.toFixed(1)+'</span></div>'
       +'<input aria-label="Band '+(i+1)+' Q" data-field="q" type="number" min=".2" max="12" step=".1" value="'+band.q+'">'
@@ -89,10 +90,11 @@ $("bands").addEventListener("input",ev=>{
 });
 $("bands").addEventListener("change",ev=>{
   const field=ev.target.dataset.field,row=ev.target.closest("[data-row]");
-  if(!row || !["on","q","gain"].includes(field))return;
+  if(!row || !["on","q","gain","freq"].includes(field))return;
   const i=Number(row.dataset.row);
   let value=field==="on"?ev.target.checked:Number(ev.target.value);
   if(field==="q"&&(!Number.isFinite(value)||value<.2||value>12)){error("Q must be between 0.2 and 12.");refresh();return;}
+  if(field==="freq"&&(!Number.isFinite(value)||value<20||value>20000)){error("Frequency must be between 20 and 20,000 Hz.");refresh();return;}
   for(const ch of side==="linked"?["left","right"]:[side])profile[ch][i][field]=value;
   save();refresh();
 });

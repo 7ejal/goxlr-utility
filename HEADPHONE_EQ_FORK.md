@@ -90,3 +90,5 @@ text-to-speech/tolk functionality enabled and does not disable all-features
 builds. These compatibility changes are separate from the EQ model.
 
 Note: The observed tolk-sys 0.2.2 build script removes three trailing OUT_DIR path components, so the Windows CI setup explicitly creates both debug/examples and debug/build/examples (and release counterparts). No TTS functionality is disabled.
+
+All 20 center frequencies are editable independently per left/right channel (20–20,000 Hz), in addition to gain, Q and band bypass. Linked mode copies edits to both channels.

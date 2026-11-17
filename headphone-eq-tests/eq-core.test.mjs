@@ -77,5 +77,7 @@ test("App is locally served and never sends device mutation commands",async()=>{
   assert.match(main,/href="\/headphone-eq\/index.html"/);
   assert.match(page,/app\.mjs/);
   assert.match(app,/JSON\.stringify\("GetStatus"\)/);
+  assert.match(app,/data-field="freq"/);
+  assert.match(app,/value<20\|\|value>20000/);
   assert.doesNotMatch(app,/\/firmware-upload|SetRouting|SetEqGain|RunFirmwareUpdate/);
 });
