@@ -41,6 +41,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           Copy-Item target/release/goxlr-daemon.exe $out/
           Copy-Item target/release/goxlr-client.exe $out/
+          # Windows all-features builds may depend on these screen-reader DLLs.
+          Get-ChildItem -Path target/release -Filter *.dll -File | ForEach-Object {
+            Copy-Item $_.FullName -Destination $out
+          }
           Copy-Item HEADPHONE_EQ_FORK.md $out/
           Copy-Item LICENSE $out/
           @'

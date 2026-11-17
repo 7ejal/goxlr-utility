@@ -107,3 +107,5 @@ Avoid testing unless the build workflow reports success and the ZIP contains
 both daemon and CLI executables. No firmware flashing is involved.
 
 The Windows full-Clippy CI also revealed a pre-existing needless-bool expression in locate_goxlr_driver(); this fork simplifies it without changing the registry/file detection logic.
+
+The fork portable Windows ZIP includes any native DLLs that the upstream all-features build emits next to the daemon, such as the screen-reader integration runtime. It remains a manual portable test package, not a signed production installer.
