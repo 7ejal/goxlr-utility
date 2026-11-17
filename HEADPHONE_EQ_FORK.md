@@ -76,3 +76,15 @@ was copied into the feature implementation.
 
 Official upstream contribution policy: this feature branch is for the
 user's own fork, not an upstream contribution to GoXLR-on-Linux.
+
+## Fork CI compatibility fixes
+
+The upstream fork baseline had two independent build issues exposed by the
+latest toolchains: Rust Clippy rejected a needless boolean return in the sample
+bank helper, and the Windows tolk-sys 0.2.2 build script expected its target
+debug/release examples directory to exist before copying screen-reader DLLs.
+
+This branch simplifies the boolean without changing behavior and prepares
+the destination directories in Windows check and release CI. It leaves
+text-to-speech/tolk functionality enabled and does not disable all-features
+builds. These compatibility changes are separate from the EQ model.

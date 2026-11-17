@@ -91,6 +91,12 @@ jobs:
           key: ${{ runner.os }}-cargo-debug-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-debug-
 
+      # tolk-sys 0.2.2 copies vendor DLLs into target/debug/examples
+      # in build.rs without creating that directory first.
+      - name: Prepare Tolk runtime destination
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path target/debug/examples | Out-Null
+
       - name: Running Tests
         run: cargo check --all-features
 
