@@ -105,3 +105,5 @@ profiles and stop the existing daemon before testing the portable executable,
 then revert by stopping this daemon and restarting the installed one.
 Avoid testing unless the build workflow reports success and the ZIP contains
 both daemon and CLI executables. No firmware flashing is involved.
+
+The Windows full-Clippy CI also revealed a pre-existing needless-bool expression in locate_goxlr_driver(); this fork simplifies it without changing the registry/file detection logic.
