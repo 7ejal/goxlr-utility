@@ -92,3 +92,16 @@ builds. These compatibility changes are separate from the EQ model.
 Note: The observed tolk-sys 0.2.2 build script removes three trailing OUT_DIR path components, so the Windows CI setup explicitly creates both debug/examples and debug/build/examples (and release counterparts). No TTS functionality is disabled.
 
 All 20 center frequencies are editable independently per left/right channel (20–20,000 Hz), in addition to gain, Q and band bypass. Linked mode copies edits to both channels.
+
+## Fork-only portable Windows build
+
+The separate workflow Fork Windows EQ Lab portable build compiles the
+Windows x64 GoXLR daemon and CLI with all original Cargo features on a
+GitHub-hosted Windows runner and uploads a ZIP. It is NOT an installer;
+the original Tauri UI wrapper and Windows audio drivers are not bundled.
+
+Do not run the fork and installed GoXLR daemons simultaneously. Back up
+profiles and stop the existing daemon before testing the portable executable,
+then revert by stopping this daemon and restarting the installed one.
+Avoid testing unless the build workflow reports success and the ZIP contains
+both daemon and CLI executables. No firmware flashing is involved.
