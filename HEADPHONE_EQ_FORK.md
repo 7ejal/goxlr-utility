@@ -109,3 +109,14 @@ both daemon and CLI executables. No firmware flashing is involved.
 The Windows full-Clippy CI also revealed a pre-existing needless-bool expression in locate_goxlr_driver(); this fork simplifies it without changing the registry/file detection logic.
 
 The fork portable Windows ZIP includes any native DLLs that the upstream all-features build emits next to the daemon, such as the screen-reader integration runtime. It remains a manual portable test package, not a signed production installer.
+
+## Single-file browser preview
+
+An additional generated standalone/GoXLR-EQ-Lab-OFFLINE-PREVIEW.html is fully
+self-contained (inline CSS and JavaScript) and can be opened directly in a
+modern browser. It supports EQ curve editing, local presets and
+profile/APO/research-data exports. Browser localStorage may not persist on
+some file:// origins, and the read-only device-status button cannot be relied
+on outside the installed local daemon. This is NOT hardware EQ or an
+installer, and does not change the actual GoXLR sound.
+Rebuild using python3 headphone-eq-tests/build_standalone.py.
