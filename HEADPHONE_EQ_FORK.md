@@ -88,3 +88,5 @@ This branch simplifies the boolean without changing behavior and prepares
 the destination directories in Windows check and release CI. It leaves
 text-to-speech/tolk functionality enabled and does not disable all-features
 builds. These compatibility changes are separate from the EQ model.
+
+Note: The observed tolk-sys 0.2.2 build script removes three trailing OUT_DIR path components, so the Windows CI setup explicitly creates both debug/examples and debug/build/examples (and release counterparts). No TTS functionality is disabled.

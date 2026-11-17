@@ -95,7 +95,9 @@ jobs:
       # in build.rs without creating that directory first.
       - name: Prepare Tolk runtime destination
         shell: pwsh
-        run: New-Item -ItemType Directory -Force -Path target/debug/examples | Out-Null
+        run: |
+          New-Item -ItemType Directory -Force -Path target/debug/examples | Out-Null
+          New-Item -ItemType Directory -Force -Path target/debug/build/examples | Out-Null
 
       - name: Running Tests
         run: cargo check --all-features

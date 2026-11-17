@@ -63,7 +63,9 @@ jobs:
       # tolk-sys 0.2.2 expects this directory in its Windows build.rs.
       - name: "Prepare Tolk runtime destination"
         shell: pwsh
-        run: New-Item -ItemType Directory -Force -Path goxlr-utility/target/release/examples | Out-Null
+        run: |
+          New-Item -ItemType Directory -Force -Path goxlr-utility/target/release/examples | Out-Null
+          New-Item -ItemType Directory -Force -Path goxlr-utility/target/release/build/examples | Out-Null
 
       - name: "Build Utility"
         run: "cargo build --manifest-path=goxlr-utility/Cargo.toml --release --all-features"
