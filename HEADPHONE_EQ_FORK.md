@@ -138,3 +138,23 @@ No upstream submission is made.
 10 local Node tests passed (including tab render expression and original-byte
 preservation); actual browser/device UI operation and the new Windows binary
 are not yet validated. No new DSP protocol or audio apply function is enabled.
+
+## EQ11 stock-kernel research profile (2026-11-18)
+
+Create a new 11-band research profile from the integrated Headphones EQ tab.
+Its center frequencies are 31/63/125/250/500/1000/2000/4000/8000/12000/16000
+Hz; edit gain, frequency, Q and channel separately. Existing 20-band profile
+format remains supported, and changing profile size requires explicit
+confirmation. The nine extra slots are disabled in EQ11 mode.
+
+Export stock-kernel EQ11 research data produces JSON containing two 180-byte
+Q1.23 coefficient banks (11 user sections plus exact identity padding),
+a separate estimated preamp and non-flashable metadata for the existing
+four-call P:000D99 lab wrapper. The browser checks pole stability and
+response-model error <=0.1 dB per section on a 2048-frequency sample grid.
+On the selected original asymmetric 11-band fixture, expected model errors
+are ~0.00091 dB left and ~0.00363 dB right. The JavaScript search produces
+slightly different optimized Q23 words from the Python reference (4/9
+different bytes respectively); these are NOT a bit-for-bit equivalence.
+No live DSP upload, physical audio path or recovery is implemented. Do not
+flash the data or interpret the preview as actual sound processing.

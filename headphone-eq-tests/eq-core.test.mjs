@@ -102,3 +102,30 @@ test("Headphones EQ is an appended native tab and original bundled UI is unchang
   assert.equal(tab.slots.default()[0].tag,"iframe");
   assert.equal(tab.slots.default()[0].props.src,"/headphone-eq/index.html?embedded=1");
 });
+
+test("11-band stock layout exports two 180-byte banks with exact identity padding",async()=>{
+  const {flat11,native11Data}=await import("../daemon/web-content/headphone-eq/eq-core.mjs");
+  const p=flat11(),m=native11Data(p);
+  assert.equal(m.flashable,false);assert.equal(m.hardware_apply,false);
+  assert.equal(m.calls_per_channel,4);
+  assert.equal(m.channels[0].u24be_hex.length,360);
+  assert.equal(m.channels[0].u24be_hex,m.channels[1].u24be_hex);
+  assert.match(m.channels[0].u24be_hex,/000000000000080000000000000000$/);
+  assert.throws(()=>native11Data(flat()));
+});
+test("11-band stereo stock-layout model has bounded error and rejects invalid mode",async()=>{
+  const {flat11,native11Data}=await import("../daemon/web-content/headphone-eq/eq-core.mjs");
+  const p=flat11();
+  [ [3,-2,2,-3,1.5,4,-2,1,-1,2,-1],[-2,1,3,-1,2,-3,1.5,-2,2,-1,1] ].forEach((g,i)=>{
+    g.forEach((v,j)=>p[i?"right":"left"][j].gain=v);
+  });
+  const m=native11Data(p);
+  assert.notEqual(m.channels[0].u24be_hex,m.channels[1].u24be_hex);
+  const {createHash}=await import("node:crypto");
+  assert.deepEqual(m.channels.map(x=>createHash("sha256").update(Buffer.from(x.u24be_hex,"hex")).digest("hex")),
+   ["c83d8a91eab8d0880ea59233c1a17221b748c22e3549550e83a4b50769c642f5","1bc6bceeaf66792f7cef1bf4ab25d24195282a69b8228f67cae384eaea17bff5"]);
+  assert.ok(m.channels.every(x=>x.max_section_model_error_db<=.1));
+  assert.ok(m.preamp_db<0);
+  p.right[11].on=true;assert.throws(()=>native11Data(p));
+  p.right[11].on=false;p.autoHeadroom=false;assert.throws(()=>native11Data(p));
+});

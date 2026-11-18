@@ -1,4 +1,4 @@
-import {flat,validate,compile,apo,bank,preset,ENDPOINTS} from "./eq-core.mjs";
+import {flat,validate,compile,apo,bank,preset,ENDPOINTS,flat11,native11Data} from "./eq-core.mjs";
 const $=id=>document.getElementById(id);
 const STORAGE="goxlr-headphone-eq-lab-v1";
 const embedded = new URLSearchParams(window.location.search).get("embedded")==="1" && window.parent!==window;
@@ -40,7 +40,7 @@ function paintGraph(){
 function dataSide(){return side==="right"?"right":"left";}
 function drawTable(){
   const node=$("bands");
-  const bands=profile[dataSide()];
+  const bands=profile[dataSide()].slice(0,profile.native11?11:20);
   node.replaceChildren();
   bands.forEach((band,i)=>{
     const row=document.createElement("div");
@@ -66,12 +66,15 @@ function drawEndpoints(){
   });
 }
 function refresh(){
+  $("bandMode").textContent=profile.native11?"11-band native research profile":"20-band editor";
+  $("exportNative11").disabled=!profile.native11;
+
   $("profileName").value=profile.name;$("enabled").checked=profile.enabled;
   $("autoHeadroom").checked=profile.autoHeadroom;$("preamp").value=profile.preamp;
   document.querySelectorAll("[data-side]").forEach(el=>el.classList.toggle("active",el.dataset.side===side));
   try{
     current=compile(profile,512);
-    $("effective").textContent="Applied preamp "+current.preamp.toFixed(2)+" dB";
+    $("effective").textContent="Estimated preamp "+current.preamp.toFixed(2)+" dB";
     $("peak").textContent="Peak boost "+current.peak.toFixed(2)+" dB";
   }catch(ex){current=null;error(ex.message);}
   drawTable();paintGraph();drawEndpoints();
@@ -85,7 +88,7 @@ $("bands").addEventListener("input",ev=>{
   for(const ch of sides)profile[ch][i].gain=value;
   row.querySelector(".value").textContent=(value>0?"+":"")+value.toFixed(1);
   try{current=compile(profile,512);paintGraph();
-    $("effective").textContent="Applied preamp "+current.preamp.toFixed(2)+" dB";
+    $("effective").textContent="Estimated preamp "+current.preamp.toFixed(2)+" dB";
     $("peak").textContent="Peak boost "+current.peak.toFixed(2)+" dB";
   }catch(ex){error(ex.message);}
   clearTimeout(saveTimeout);saveTimeout=setTimeout(save,250);
@@ -101,7 +104,17 @@ $("bands").addEventListener("change",ev=>{
   save();refresh();
 });
 document.querySelectorAll("[data-side]").forEach(el=>el.addEventListener("click",()=>{side=el.dataset.side;refresh();}));
-$("preset").addEventListener("change",ev=>{profile=preset(ev.target.value);save();refresh();});
+$("preset").addEventListener("change",ev=>{const p=preset(ev.target.value);
+  if(profile.native11){
+    const next=flat11();next.name=p.name+" (11)";
+    for(const ch of ["left","right"])for(let i=0;i<11;i++){
+      // Reuse the existing preset curve at nearest logarithmic center.
+      const f=next[ch][i].freq;
+      next[ch][i].gain=p[ch].reduce((a,b)=>Math.abs(Math.log(b.freq/f))<Math.abs(Math.log(a.freq/f))?b:a).gain;
+    }
+    profile=next;
+  }else profile=p;
+  save();refresh();});
 $("enabled").addEventListener("change",ev=>{profile.enabled=ev.target.checked;save();refresh();});
 $("autoHeadroom").addEventListener("change",ev=>{profile.autoHeadroom=ev.target.checked;save();refresh();});
 $("preamp").addEventListener("change",ev=>{
@@ -110,7 +123,7 @@ $("preamp").addEventListener("change",ev=>{
   profile.preamp=v;save();refresh();
 });
 $("profileName").addEventListener("change",ev=>{profile.name=ev.target.value.slice(0,80);save();refresh();});
-$("reset").addEventListener("click",()=>{profile=flat();side="linked";save();refresh();});
+$("reset").addEventListener("click",()=>{profile=profile.native11?flat11():flat();side="linked";save();refresh();});
 $("exportJson").addEventListener("click",()=>{
   try{validate(profile);download("GoXLR-headphone-EQ-profile.json",JSON.stringify(profile,null,2),"application/json");}
   catch(ex){error(ex.message);}
@@ -129,6 +142,19 @@ $("exportApo").addEventListener("click",()=>{
 $("copyApo").addEventListener("click",async ()=>{
   try{await navigator.clipboard.writeText(apo(profile,compile(profile,2048)));note("APO configuration copied. Device installation is manual.");}
   catch(ex){error("Copy failed: "+ex.message);}
+});
+$("newNative11").addEventListener("click",()=>{
+  if(!confirm("Start a new 11-band research profile? Export your current profile first if you want to keep it."))return;
+  profile=flat11();side="linked";save();refresh();
+});
+$("new20").addEventListener("click",()=>{
+  if(!confirm("Start a new 20-band profile? Export your current profile first if you want to keep it."))return;
+  profile=flat();side="linked";save();refresh();
+});
+$("exportNative11").addEventListener("click",()=>{
+  try{download("EQ11_EMULATOR_DATA_NOT_FIRMWARE.json",JSON.stringify(native11Data(profile),null,2),"application/json");
+    note("Exported 11-band stock-kernel research coefficients. No hardware applied.");}
+  catch(ex){error(ex.message);}
 });
 $("exportData").addEventListener("click",()=>{
   try{download("DATA_ONLY_NOT_FLASHABLE.gxeq",bank(profile,compile(profile,2048)),"application/octet-stream");}

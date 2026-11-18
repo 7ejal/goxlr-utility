@@ -31,7 +31,7 @@ body.embedded{background:#15161c}body.embedded .layout{max-width:none;padding:12
   <div class="cols">
     <section class="panel main">
       <div class="topline">
-        <div><h2>Parametric equalizer</h2><span class="sub">20 editable filters per channel · 48 kHz · Q3.21 preview</span></div>
+        <div><h2>Parametric equalizer</h2><span class="sub"><span id="bandMode">20-band editor</span> · 48 kHz · Q3.21 preview</span></div>
         <label class="toggle"><input id="enabled" type="checkbox" checked> <span>EQ enabled</span></label>
       </div>
       <div class="channel-bar">
@@ -71,6 +71,8 @@ body.embedded{background:#15161c}body.embedded .layout{max-width:none;padding:12
           <button class="accent" id="exportJson">Export preset JSON</button>
           <label class="filebutton">Import preset JSON <input id="importJson" type="file" accept=".json,application/json"></label>
           <button id="reset">Reset to flat</button>
+          <button id="newNative11">New 11-band research profile</button>
+          <button id="new20">New 20-band profile</button>
         </div>
         <p id="localMessage" class="small" role="status">Saved in this browser only.</p>
       </section>
@@ -89,6 +91,8 @@ body.embedded{background:#15161c}body.embedded .layout{max-width:none;padding:12
         <div class="status"><span class="dot blocked"></span> <strong>Hardware apply unavailable</strong></div>
         <p class="sub">Only the coefficient data format is implemented. Flashing or live DSP write controls are disabled until the physical headphone DAC, processing budget, stream isolation and recovery are verified.</p>
         <button id="exportData">Export DSP data only (.gxeq)</button>
+        <button id="exportNative11" disabled>Export stock-kernel EQ11 research data</button>
+        <p class="small">11-band mode reuses the original three-biquad routine in four passes per channel. The export contains two 180-byte coefficient banks and a separate preamp. Offline emulator only, no device apply.</p>
         <p class="warning">Never upload the .gxeq file to any firmware updater. It is a 988-byte research data bank, not a GoXLR firmware image.</p>
       </section>
       <section class="panel">
@@ -132,6 +136,8 @@ function validate(p) {
         throw Error("Invalid frequency, gain, Q or enable");
     }
   }
+  if(p.native11!==undefined&&typeof p.native11!=="boolean")throw Error("Invalid native11 mode");
+  if(p.native11&&["left","right"].some(ch=>p[ch].slice(11).some(b=>b.on)))throw Error("Extra native11 bands must remain disabled");
   if(!Array.isArray(p.endpoints)||new Set(p.endpoints).size!==p.endpoints.length
      ||p.endpoints.some(x=>!ENDPOINTS.includes(x)))throw Error("Invalid GoXLR Windows endpoints");
   return p;
@@ -233,6 +239,86 @@ function preset(name){
   return p;
 }
 
+// Native research mode: reuse the stock three-biquad DSP routine P:000D99.
+// The host format is data only. No device command or firmware is generated.
+const FREQS11=Object.freeze([31,63,125,250,500,1000,2000,4000,8000,12000,16000]);
+function flat11(){
+  const p=flat(); p.name="11-band native research"; p.native11=true;
+  for(const ch of ["left","right"]){
+    p[ch]=p[ch].map((b,i)=>i<11?{freq:FREQS11[i],gain:0,q:1,on:true}:{...b,gain:0,on:false});
+  }
+  return p;
+}
+function stableStock(c){return Math.abs(c[4])<1 && 1-c[3]-c[4]>0 && 1+c[3]-c[4]>0;}
+const STOCK_SCALE=[.5,1,.25];
+const STOCK_GRID=[20,25,31,35,45,50,63,75,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,18000,20000];
+function stockNorm(w,i){
+  const s=STOCK_SCALE[i%3],v=w.map(n=>n/Q23);
+  return [v[2]*4/s,v[1]*4/s,v[0]*2/s,-2*v[4],-v[3]];
+}
+function packStock(q,i){
+  const s=STOCK_SCALE[i%3];
+  const clipRound=v=>{
+    const n=Math.round(v*Q23);if(n< -Q23||n>=Q23)throw Error("Stock Q23 coefficient out of bounds");return n;
+  };
+  if(q[0]===Q21&&q[1]===-q[3]&&q[2]===-q[4])return [0,0,clipRound(s/4),0,0];
+  const [b0,b1,b2,f1,f2]=q.map(n=>n/Q21);
+  let w=[s*b2/2,s*b1/4,s*b0/4,-f2,-f1/2].map(clipRound);
+  const target=q.map(n=>n/Q21),expected=STOCK_GRID.map(f=>db(target,f));
+  const score=t=>{
+    const c=stockNorm(t,i);
+    if(!stableStock(c))return Infinity;
+    return Math.max(...STOCK_GRID.map((f,j)=>Math.abs(db(c,f)-expected[j])));
+  };
+  let best=score(w);
+  for(let pass=0;pass<8;pass++){
+    let progress=false;
+    for(let j=0;j<5;j++){
+      let winner=w[j],cost=best;
+      for(const delta of [-8,-6,-4,-3,-2,-1,1,2,3,4,6,8]){
+        const v=w[j]+delta;if(v< -Q23||v>=Q23)continue;
+        const t=w.slice();t[j]=v;const k=score(t);
+        if(k+1e-9<cost){winner=v;cost=k;}
+      }
+      if(winner!==w[j]){w[j]=winner;best=cost;progress=true;}
+    }
+    if(!progress)break;
+  }
+  return w;
+}
+function native11Data(p){
+  validate(p);
+  if(!p.native11||["left","right"].some(ch=>p[ch].slice(11).some(b=>b.on)))
+    throw Error("Create an 11-band research profile first; all extra bands must be disabled.");
+  if(p.enabled&&!p.autoHeadroom)throw Error("Enable automatic headroom before exporting native research data.");
+  const channels=[],dense=Array.from({length:2048},(_,i)=>20*1000**(i/2047));
+  let peak=-Infinity;
+  for(const ch of ["left","right"]){
+    let words=[],maxError=0,norm=[];
+    for(let i=0;i<12;i++){
+      const band=p[ch][i];
+      const q=(i<11 && p.enabled && band.on && band.gain!==0)?quantize(coeff(band)):[Q21,0,0,0,0];
+      const w=packStock(q,i),target=q.map(n=>n/Q21),recovered=stockNorm(w,i);
+      if(!stableStock(recovered))throw Error("Unstable packed filter");
+      const error=Math.max(...dense.map(f=>Math.abs(db(recovered,f)-db(target,f))));
+      if(!Number.isFinite(error)||error>.1)throw Error("Stock-layout response error >0.1 dB; adjust gain, frequency or Q");
+      maxError=Math.max(maxError,error);words.push(...w);norm.push(recovered);
+    }
+    peak=Math.max(peak,...dense.map(f=>norm.reduce((s,c)=>s+db(c,f),0)));
+    const hex=words.map(n=>(n&0xffffff).toString(16).padStart(6,"0")).join("");
+    if(hex.length!==360)throw Error("Incorrect 180-byte channel data size");
+    channels.push({channel:ch,coefficient_bytes:180,u24be_hex:hex,max_section_model_error_db:maxError});
+  }
+  const preamp=p.enabled?Math.min(0,p.preamp,-peak-.5):0;
+  if(preamp< -30)throw Error("Required preamp below -30 dB");
+  return {schema:"GXEQ11_OFFLINE_STOCK_LAYOUT_V1",flashable:false,hardware_apply:false,
+    stock_kernel:"P:000D99",lab_wrapper:"P:005FF2",active_slots_per_channel:11,padding_slots_per_channel:1,
+    calls_per_channel:4,sample_rate:FS,enabled:p.enabled,estimated_peak_db:peak,
+    preamp_db:preamp,preamp_q23:Math.min(Q23,Math.round(10**(preamp/20)*Q23)),
+    preamp_not_in_coefficients:true,channels,
+    warning:"EMULATOR DATA ONLY. Not firmware. No physical headphone path, transport or device memory allocation established."};
+}
+
 
 const $=id=>document.getElementById(id);
 const STORAGE="goxlr-headphone-eq-lab-v1";
@@ -275,7 +361,7 @@ function paintGraph(){
 function dataSide(){return side==="right"?"right":"left";}
 function drawTable(){
   const node=$("bands");
-  const bands=profile[dataSide()];
+  const bands=profile[dataSide()].slice(0,profile.native11?11:20);
   node.replaceChildren();
   bands.forEach((band,i)=>{
     const row=document.createElement("div");
@@ -301,12 +387,15 @@ function drawEndpoints(){
   });
 }
 function refresh(){
+  $("bandMode").textContent=profile.native11?"11-band native research profile":"20-band editor";
+  $("exportNative11").disabled=!profile.native11;
+
   $("profileName").value=profile.name;$("enabled").checked=profile.enabled;
   $("autoHeadroom").checked=profile.autoHeadroom;$("preamp").value=profile.preamp;
   document.querySelectorAll("[data-side]").forEach(el=>el.classList.toggle("active",el.dataset.side===side));
   try{
     current=compile(profile,512);
-    $("effective").textContent="Applied preamp "+current.preamp.toFixed(2)+" dB";
+    $("effective").textContent="Estimated preamp "+current.preamp.toFixed(2)+" dB";
     $("peak").textContent="Peak boost "+current.peak.toFixed(2)+" dB";
   }catch(ex){current=null;error(ex.message);}
   drawTable();paintGraph();drawEndpoints();
@@ -320,7 +409,7 @@ $("bands").addEventListener("input",ev=>{
   for(const ch of sides)profile[ch][i].gain=value;
   row.querySelector(".value").textContent=(value>0?"+":"")+value.toFixed(1);
   try{current=compile(profile,512);paintGraph();
-    $("effective").textContent="Applied preamp "+current.preamp.toFixed(2)+" dB";
+    $("effective").textContent="Estimated preamp "+current.preamp.toFixed(2)+" dB";
     $("peak").textContent="Peak boost "+current.peak.toFixed(2)+" dB";
   }catch(ex){error(ex.message);}
   clearTimeout(saveTimeout);saveTimeout=setTimeout(save,250);
@@ -336,7 +425,17 @@ $("bands").addEventListener("change",ev=>{
   save();refresh();
 });
 document.querySelectorAll("[data-side]").forEach(el=>el.addEventListener("click",()=>{side=el.dataset.side;refresh();}));
-$("preset").addEventListener("change",ev=>{profile=preset(ev.target.value);save();refresh();});
+$("preset").addEventListener("change",ev=>{const p=preset(ev.target.value);
+  if(profile.native11){
+    const next=flat11();next.name=p.name+" (11)";
+    for(const ch of ["left","right"])for(let i=0;i<11;i++){
+      // Reuse the existing preset curve at nearest logarithmic center.
+      const f=next[ch][i].freq;
+      next[ch][i].gain=p[ch].reduce((a,b)=>Math.abs(Math.log(b.freq/f))<Math.abs(Math.log(a.freq/f))?b:a).gain;
+    }
+    profile=next;
+  }else profile=p;
+  save();refresh();});
 $("enabled").addEventListener("change",ev=>{profile.enabled=ev.target.checked;save();refresh();});
 $("autoHeadroom").addEventListener("change",ev=>{profile.autoHeadroom=ev.target.checked;save();refresh();});
 $("preamp").addEventListener("change",ev=>{
@@ -345,7 +444,7 @@ $("preamp").addEventListener("change",ev=>{
   profile.preamp=v;save();refresh();
 });
 $("profileName").addEventListener("change",ev=>{profile.name=ev.target.value.slice(0,80);save();refresh();});
-$("reset").addEventListener("click",()=>{profile=flat();side="linked";save();refresh();});
+$("reset").addEventListener("click",()=>{profile=profile.native11?flat11():flat();side="linked";save();refresh();});
 $("exportJson").addEventListener("click",()=>{
   try{validate(profile);download("GoXLR-headphone-EQ-profile.json",JSON.stringify(profile,null,2),"application/json");}
   catch(ex){error(ex.message);}
@@ -364,6 +463,19 @@ $("exportApo").addEventListener("click",()=>{
 $("copyApo").addEventListener("click",async ()=>{
   try{await navigator.clipboard.writeText(apo(profile,compile(profile,2048)));note("APO configuration copied. Device installation is manual.");}
   catch(ex){error("Copy failed: "+ex.message);}
+});
+$("newNative11").addEventListener("click",()=>{
+  if(!confirm("Start a new 11-band research profile? Export your current profile first if you want to keep it."))return;
+  profile=flat11();side="linked";save();refresh();
+});
+$("new20").addEventListener("click",()=>{
+  if(!confirm("Start a new 20-band profile? Export your current profile first if you want to keep it."))return;
+  profile=flat();side="linked";save();refresh();
+});
+$("exportNative11").addEventListener("click",()=>{
+  try{download("EQ11_EMULATOR_DATA_NOT_FIRMWARE.json",JSON.stringify(native11Data(profile),null,2),"application/json");
+    note("Exported 11-band stock-kernel research coefficients. No hardware applied.");}
+  catch(ex){error(ex.message);}
 });
 $("exportData").addEventListener("click",()=>{
   try{download("DATA_ONLY_NOT_FLASHABLE.gxeq",bank(profile,compile(profile,2048)),"application/octet-stream");}

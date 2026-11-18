@@ -20,7 +20,7 @@
   <div class="cols">
     <section class="panel main">
       <div class="topline">
-        <div><h2>Parametric equalizer</h2><span class="sub">20 editable filters per channel · 48 kHz · Q3.21 preview</span></div>
+        <div><h2>Parametric equalizer</h2><span class="sub"><span id="bandMode">20-band editor</span> · 48 kHz · Q3.21 preview</span></div>
         <label class="toggle"><input id="enabled" type="checkbox" checked> <span>EQ enabled</span></label>
       </div>
       <div class="channel-bar">
@@ -60,6 +60,8 @@
           <button class="accent" id="exportJson">Export preset JSON</button>
           <label class="filebutton">Import preset JSON <input id="importJson" type="file" accept=".json,application/json"></label>
           <button id="reset">Reset to flat</button>
+          <button id="newNative11">New 11-band research profile</button>
+          <button id="new20">New 20-band profile</button>
         </div>
         <p id="localMessage" class="small" role="status">Saved in this browser only.</p>
       </section>
@@ -78,6 +80,8 @@
         <div class="status"><span class="dot blocked"></span> <strong>Hardware apply unavailable</strong></div>
         <p class="sub">Only the coefficient data format is implemented. Flashing or live DSP write controls are disabled until the physical headphone DAC, processing budget, stream isolation and recovery are verified.</p>
         <button id="exportData">Export DSP data only (.gxeq)</button>
+        <button id="exportNative11" disabled>Export stock-kernel EQ11 research data</button>
+        <p class="small">11-band mode reuses the original three-biquad routine in four passes per channel. The export contains two 180-byte coefficient banks and a separate preamp. Offline emulator only, no device apply.</p>
         <p class="warning">Never upload the .gxeq file to any firmware updater. It is a 988-byte research data bank, not a GoXLR firmware image.</p>
       </section>
       <section class="panel">
