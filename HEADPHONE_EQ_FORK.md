@@ -158,3 +158,24 @@ slightly different optimized Q23 words from the Python reference (4/9
 different bytes respectively); these are NOT a bit-for-bit equivalence.
 No live DSP upload, physical audio path or recovery is implemented. Do not
 flash the data or interpret the preview as actual sound processing.
+
+## EQ11 host update transport (2026-11-18)
+
+The integrated tab now has an opt-in automatic coefficient-update *test*
+and manual Test coefficient update button. Only available on HTTP loopback
+for 11-band profiles. The browser builds a 376-byte E11L v1 packet with
+enable flag, Q23 preamp, both 180-byte banks and CRC32. It POSTs to the
+fork's local /api/eq11-lab/update endpoint. Request host, peer, origin and
+content type are checked. The Rust receiver checks lengths, integrity,
+flags, preamp, stock identity padding and pole stability. A whole stereo
+bank is committed at a synthetic 64-frame block boundary; the result
+reports generation, changed samples and unchanged candidate lanes 2/3.
+The receiver has no USB/device sender and no firmware opcode.
+The float reference model resets histories per test block. It does not
+prove click-free updates, real-time capacity, physical stream isolation
+or DSP-native behavior. No actual device audio is changed.
+13 Node and 4 standalone Rust tests pass, including a real browser-generated
+binary fixture decoded by Rust. Firmware 904 remains emulator-only.
+Original DSP dispatch P:0001C2..1C6 was also successfully exercised on
+the Windows JIT with a synthetic Y:0008 callback node targeting 005FF2.
+That independent harness is not an integrated real scheduler or PCB path.

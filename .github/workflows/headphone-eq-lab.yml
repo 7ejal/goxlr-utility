@@ -6,6 +6,8 @@ on:
       - 'daemon/web-content/index.html'
       - 'daemon/web-content/assets/index-BJM830Pw*.js'
       - 'headphone-eq-tests/**'
+      - 'daemon/src/servers/eq11_lab.rs'
+      - 'daemon/src/servers/http_server.rs'
       - '.github/workflows/headphone-eq-lab.yml'
   pull_request:
     paths:
@@ -13,6 +15,8 @@ on:
       - 'daemon/web-content/index.html'
       - 'daemon/web-content/assets/index-BJM830Pw*.js'
       - 'headphone-eq-tests/**'
+      - 'daemon/src/servers/eq11_lab.rs'
+      - 'daemon/src/servers/http_server.rs'
       - '.github/workflows/headphone-eq-lab.yml'
 jobs:
   offline-eq-model:
@@ -32,3 +36,8 @@ jobs:
           git diff --exit-code
       - name: Offline EQ regression and Python compiler parity fixture
         run: node --test headphone-eq-tests/eq-core.test.mjs
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Host-only block update validation
+        run: |
+          rustc --edition 2024 --test daemon/src/servers/eq11_lab.rs -o /tmp/eq11-lab-tests
+          /tmp/eq11-lab-tests

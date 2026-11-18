@@ -1,14 +1,39 @@
-import {flat,validate,compile,apo,bank,preset,ENDPOINTS,flat11,native11Data} from "./eq-core.mjs";
+import {flat,validate,compile,apo,bank,preset,ENDPOINTS,flat11,native11Data,labUpdatePacket} from "./eq-core.mjs";
 const $=id=>document.getElementById(id);
 const STORAGE="goxlr-headphone-eq-lab-v1";
 const embedded = new URLSearchParams(window.location.search).get("embedded")==="1" && window.parent!==window;
 if(embedded) document.body.classList.add("embedded");
 let profile=flat(),side="linked",current=null,saveTimeout=0;
+// This sends a host-only test packet; never writes to the physical device.
+const labAvailable=location.protocol==="http:" && ["127.0.0.1","localhost"].includes(location.hostname);
+let labBusy=false,labQueued=false,labTimer=0;
+async function runLabUpdate(){
+  if(!labAvailable||!profile.native11)return;
+  if(labBusy){labQueued=true;return;}
+  labBusy=true;
+  $("labResult").textContent="Testing coefficient update…";
+  try{
+    const payload=labUpdatePacket(profile);
+    const r=await fetch("/api/eq11-lab/update",{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:payload});
+    const j=await r.json();
+    if(!r.ok||j.mode!=="synthetic_block_only"||j.device_applied!==false||!j.other_lanes_unchanged)throw Error(j.error||"Lab endpoint rejected update");
+    $("labResult").textContent="Host test #"+j.generation+": "+j.changed_samples.join("/")+" samples changed L/R; other candidate lanes unchanged. Hardware NOT updated.";
+  }catch(e){$("labResult").textContent="Lab test failed: "+e.message;}
+  finally{
+    labBusy=false;
+    if(labQueued){labQueued=false;if($("autoLab").checked)scheduleLab();}
+  }
+}
+function scheduleLab(){
+  clearTimeout(labTimer);
+  if(labAvailable&&profile.native11&&$("autoLab").checked)labTimer=setTimeout(runLabUpdate,350);
+}
+
 try{const data=JSON.parse(localStorage.getItem(STORAGE));if(data)profile=validate(data);}catch{localStorage.removeItem(STORAGE);}
 const error=message=>{const el=$("error");el.textContent=message;el.hidden=false;setTimeout(()=>el.hidden=true,6500);};
 const note=message=>$("localMessage").textContent=message;
 const save=()=>{
-  try{validate(profile);localStorage.setItem(STORAGE,JSON.stringify(profile));note("Saved locally in this browser.");}
+  try{validate(profile);localStorage.setItem(STORAGE,JSON.stringify(profile));note("Saved locally in this browser.");scheduleLab();}
   catch(ex){error(ex.message);}
 };
 function download(name,bytes,mime){
@@ -68,6 +93,13 @@ function drawEndpoints(){
 function refresh(){
   $("bandMode").textContent=profile.native11?"11-band native research profile":"20-band editor";
   $("exportNative11").disabled=!profile.native11;
+  $("testLabUpdate").disabled=!labAvailable||!profile.native11;
+  $("autoLab").disabled=!labAvailable||!profile.native11;
+  if(!labAvailable||!profile.native11){
+    $("autoLab").checked=false;
+    $("labResult").textContent="Requires an 11-band profile in the locally running fork daemon. No device writes.";
+  }
+
 
   $("profileName").value=profile.name;$("enabled").checked=profile.enabled;
   $("autoHeadroom").checked=profile.autoHeadroom;$("preamp").value=profile.preamp;
@@ -159,6 +191,11 @@ $("exportNative11").addEventListener("click",()=>{
 $("exportData").addEventListener("click",()=>{
   try{download("DATA_ONLY_NOT_FLASHABLE.gxeq",bank(profile,compile(profile,2048)),"application/octet-stream");}
   catch(ex){error(ex.message);}
+});
+$("testLabUpdate").addEventListener("click",runLabUpdate);
+$("autoLab").addEventListener("change",()=>{
+  if($("autoLab").checked)scheduleLab();
+  else {clearTimeout(labTimer);labQueued=false;}
 });
 $("checkDevice").addEventListener("click",async()=>{
   $("deviceStatus").textContent="Checking…";

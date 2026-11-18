@@ -129,3 +129,18 @@ test("11-band stereo stock-layout model has bounded error and rejects invalid mo
   p.right[11].on=true;assert.throws(()=>native11Data(p));
   p.right[11].on=false;p.autoHeadroom=false;assert.throws(()=>native11Data(p));
 });
+
+test("E11L packet is transport-specific and both channel banks are complete",async()=>{
+  const {flat11,native11Data,labUpdatePacket}=await import("../daemon/web-content/headphone-eq/eq-core.mjs");
+  const p=flat11();p.left[4].gain=3;p.right[8].gain=-2;
+  const m=native11Data(p),b=labUpdatePacket(p),v=new DataView(b.buffer);
+  assert.equal(b.length,376);
+  assert.equal(new TextDecoder().decode(b.slice(0,4)),"E11L");
+  assert.equal(v.getUint32(8,false),m.preamp_q23);
+  assert.equal(Buffer.from(b.slice(12,192)).toString("hex"),m.channels[0].u24be_hex);
+  assert.equal(Buffer.from(b.slice(192,372)).toString("hex"),m.channels[1].u24be_hex);
+  let crc=0xffffffff;
+  for(const x of b.slice(0,372)){crc^=x;for(let j=0;j<8;j++)crc=(crc>>>1)^(crc&1?0xedb88320:0);}
+  assert.equal(v.getUint32(372,false),(crc^0xffffffff)>>>0);
+  assert.throws(()=>labUpdatePacket(flat()));
+});

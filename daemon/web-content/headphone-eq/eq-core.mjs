@@ -210,3 +210,20 @@ export function native11Data(p){
     preamp_not_in_coefficients:true,channels,
     warning:"EMULATOR DATA ONLY. Not firmware. No physical headphone path, transport or device memory allocation established."};
 }
+
+// E11L is an explicit host-laboratory packet, never a GoXLR USB opcode.
+export function labUpdatePacket(p){
+  const m=native11Data(p),bytes=new Uint8Array(376),v=new DataView(bytes.buffer);
+  bytes.set([69,49,49,76]);bytes[4]=1;bytes[5]=m.enabled?1:0;
+  v.setUint32(8,m.preamp_q23,false);
+  for(const [ch,bank] of m.channels.entries()){
+    for(let i=0;i<180;i++)bytes[12+ch*180+i]=Number.parseInt(bank.u24be_hex.slice(2*i,2*i+2),16);
+  }
+  let crc=0xffffffff;
+  for(let i=0;i<372;i++){
+    crc^=bytes[i];
+    for(let j=0;j<8;j++)crc=(crc>>>1)^(crc&1?0xedb88320:0);
+  }
+  v.setUint32(372,(crc^0xffffffff)>>>0,false);
+  return bytes;
+}

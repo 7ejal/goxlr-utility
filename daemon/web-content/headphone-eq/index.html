@@ -81,6 +81,12 @@
         <p class="sub">Only the coefficient data format is implemented. Flashing or live DSP write controls are disabled until the physical headphone DAC, processing budget, stream isolation and recovery are verified.</p>
         <button id="exportData">Export DSP data only (.gxeq)</button>
         <button id="exportNative11" disabled>Export stock-kernel EQ11 research data</button>
+        <h3>Live update protocol test (host only)</h3>
+        <p class="small">Test a complete stereo coefficient update on a synthetic 64-frame block in the local daemon. This is a reference model, not the hardware scheduler or audible EQ.</p>
+        <button id="testLabUpdate" disabled>Test coefficient update</button>
+        <label class="toggle"><input id="autoLab" type="checkbox" disabled> Automatically test EQ changes</label>
+        <p id="labResult" class="small" role="status">No hardware update.</p>
+
         <p class="small">11-band mode reuses the original three-biquad routine in four passes per channel. The export contains two 180-byte coefficient banks and a separate preamp. Offline emulator only, no device apply.</p>
         <p class="warning">Never upload the .gxeq file to any firmware updater. It is a 988-byte research data bank, not a GoXLR firmware image.</p>
       </section>

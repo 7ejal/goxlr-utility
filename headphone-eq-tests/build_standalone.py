@@ -11,9 +11,9 @@ css=(source/'style.css').read_text()
 core=(source/'eq-core.mjs').read_text()
 app=(source/'app.mjs').read_text()
 assert 'export const FS' in core and 'export function compile' in core
-assert 'import {flat,validate,compile,apo,bank,preset,ENDPOINTS,flat11,native11Data} from "./eq-core.mjs";' in app
+assert 'import {flat,validate,compile,apo,bank,preset,ENDPOINTS,flat11,native11Data,labUpdatePacket} from "./eq-core.mjs";' in app
 core=core.replace('export const ','const ').replace('export function ','function ')
-app=app.replace('import {flat,validate,compile,apo,bank,preset,ENDPOINTS,flat11,native11Data} from "./eq-core.mjs";','')
+app=app.replace('import {flat,validate,compile,apo,bank,preset,ENDPOINTS,flat11,native11Data,labUpdatePacket} from "./eq-core.mjs";','')
 # File:// URLs can restrict Storage. Still allow editing/export without persistence.
 app=app.replace('catch{localStorage.removeItem(STORAGE);}',
                 'catch{try{localStorage.removeItem(STORAGE);}catch{}}')
