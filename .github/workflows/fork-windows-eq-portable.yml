@@ -1,0 +1,72 @@
+name: Fork Windows EQ Lab portable build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/headphone-eq-control-bridge]
+    paths:
+      - 'daemon/**'
+      - 'client/**'
+      - 'audio/**'
+      - 'types/**'
+      - 'ipc/**'
+      - 'profile/**'
+      - 'usb/**'
+      - 'defaults/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/fork-windows-eq-portable.yml'
+
+jobs:
+  build-windows-x64:
+    name: Build GoXLR Utility daemon with EQ Lab (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Prepare Tolk native runtime copy locations
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path target/release/examples | Out-Null
+          New-Item -ItemType Directory -Force -Path target/release/build/examples | Out-Null
+      - name: Build daemon and CLI with all original features
+        shell: pwsh
+        run: cargo build --locked --release --all-features -p goxlr-daemon -p goxlr-client
+      - name: Verify built executables and package
+        shell: pwsh
+        run: |
+          $out = 'GoXLR-Utility-Fork-EQ-Lab-Windows-x64'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item target/release/goxlr-daemon.exe $out/
+          Copy-Item target/release/goxlr-client.exe $out/
+          # Windows all-features builds may depend on these screen-reader DLLs.
+          Get-ChildItem -Path target/release -Filter *.dll -File | ForEach-Object {
+            Copy-Item $_.FullName -Destination $out
+          }
+          Copy-Item HEADPHONE_EQ_FORK.md $out/
+          Copy-Item LICENSE $out/
+          @'
+          GoXLR Utility Fork — Windows x64 portable daemon and CLI
+
+          This is an UNTESTED portable build, not a Windows installer.
+          Do not run two GoXLR daemons simultaneously.
+          Back up profiles and stop an existing GoXLR daemon before testing.
+          Running the daemon may use your existing GoXLR profile settings.
+          The EQ Lab is at http://127.0.0.1:14564/headphone-eq/index.html
+          (assuming the default GoXLR Utility daemon configuration).
+
+          The editor does NOT enable a true hardware headphone-only DSP EQ.
+          Equalizer APO export affects selected Windows playback endpoints
+          and can also change Broadcast Mix/stream sound.
+          The .gxeq file is coefficient DATA, never flash it.
+
+          Revert by stopping this daemon and restarting the installed version.
+          '@ | Set-Content -Path "$out/READ_ME_FIRST.txt"
+          Compress-Archive -Path "$out/*" -DestinationPath "$out.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GoXLR-Utility-Fork-EQ-Lab-Windows-x64
+          path: GoXLR-Utility-Fork-EQ-Lab-Windows-x64.zip
+          if-no-files-found: error

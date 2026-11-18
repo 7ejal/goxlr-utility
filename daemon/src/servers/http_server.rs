@@ -35,6 +35,7 @@ use goxlr_scribbles::get_scribble_png;
 use goxlr_types::FaderName;
 
 use crate::primary_worker::{DeviceCommand, DeviceSender};
+use crate::servers::eq11_lab::Eq11Lab;
 use crate::servers::server_packet::handle_packet;
 
 const WEB_CONTENT: Dir = include_dir!("./daemon/web-content/");
@@ -68,6 +69,7 @@ pub async fn spawn_http_server(
         scribble_state: EnumMap::default(),
     }));
 
+    let eq11_lab = Data::new(RwLock::new(Eq11Lab::default()));
     let server = HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin_fn(|origin, _req_head| {
@@ -80,6 +82,8 @@ pub async fn spawn_http_server(
         App::new()
             .wrap(Condition::new(settings.cors_enabled, cors))
             .app_data(app_data.clone())
+            .app_data(eq11_lab.clone())
+            .service(eq11_lab_update)
             .service(websocket)
             .service(execute_command)
             .service(get_devices)
@@ -318,6 +322,50 @@ async fn execute_command(
     match handle_packet(request.0, &mut data.usb_tx).await {
         Ok(result) => HttpResponse::Ok().json(result),
         Err(error) => HttpResponse::Ok().json(DaemonResponse::Error(error.to_string())),
+    }
+}
+
+// Local host-only coefficient protocol. No DeviceSender, firmware, or USB path.
+#[post("/api/eq11-lab/update")]
+async fn eq11_lab_update(
+    request: HttpRequest,
+    packet: web::Bytes,
+    lab: Data<RwLock<Eq11Lab>>,
+) -> HttpResponse {
+    let peer_ok = request
+        .peer_addr()
+        .is_some_and(|peer| peer.ip().is_loopback());
+    let host = request
+        .headers()
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let host_ok = host.split_once(':').is_some_and(|(hostname, port)| {
+        matches!(hostname, "127.0.0.1" | "localhost") && port.parse::<u16>().is_ok()
+    });
+    let origin = request
+        .headers()
+        .get("origin")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !peer_ok || !host_ok || origin != format!("http://{host}") {
+        return HttpResponse::Forbidden().finish();
+    }
+    if request
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        != Some("application/octet-stream")
+    {
+        return HttpResponse::UnsupportedMediaType().finish();
+    }
+    match lab.write().await.run_update(&packet) {
+        Ok(result) => HttpResponse::Ok().json(serde_json::json!({
+            "mode": "synthetic_block_only", "device_applied": false,
+            "generation": result.generation, "changed_samples": result.changed_samples,
+            "other_lanes_unchanged": result.other_lanes_unchanged
+        })),
+        Err(message) => HttpResponse::BadRequest().json(serde_json::json!({"error": message})),
     }
 }
 
