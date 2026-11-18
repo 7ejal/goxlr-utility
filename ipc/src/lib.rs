@@ -161,6 +161,7 @@ pub enum GoXLRCommand {
     SetEqMiniFreq(MiniEqFrequencies, f32),
     SetEqGain(EqFrequencies, i8),
     SetEqFreq(EqFrequencies, f32),
+    SetMicEqBandwidth(EqFrequencies, u8, String),
 
     // Gate Settings
     SetGateThreshold(i8),
@@ -327,4 +328,29 @@ pub enum GoXLRCommand {
 
     // Mix Monitoring
     SetMonitorMix(OutputDevice),
+}
+
+#[cfg(test)]
+mod mic_eq_bandwidth_tests {
+    use super::*;
+
+    #[test]
+    fn bandwidth_ipc_serializes_raw_integer_and_profile_name() {
+        let request = WebsocketRequest {
+            id: 2,
+            data: DaemonRequest::Command(
+                "test-device".into(),
+                GoXLRCommand::SetMicEqBandwidth(
+                    EqFrequencies::Equalizer1KHz,
+                    32,
+                    "test-profile".into(),
+                ),
+            ),
+        };
+        let json = r#"{"id":2,"data":{"Command":["test-device",{"SetMicEqBandwidth":["Equalizer1KHz",32,"test-profile"]}]}}"#;
+        assert_eq!(serde_json::to_string(&request).unwrap(), json);
+        assert!(serde_json::from_str::<WebsocketRequest>(json).is_ok());
+        assert!(serde_json::from_str::<WebsocketRequest>(&json.replace(",32,", ",16.5,")).is_err());
+        assert!(serde_json::from_str::<WebsocketRequest>(&json.replace(",32,", ",-1,")).is_err());
+    }
 }

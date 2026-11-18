@@ -19,9 +19,9 @@ use goxlr_ipc::{
 use goxlr_profile_loader::components::mute::MuteFunction;
 use goxlr_types::{
     Button, ChannelName, DeviceType, DisplayModeComponents, EffectBankPresets, EffectKey,
-    EncoderName, FaderName, HardTuneSource, InputDevice as BasicInputDevice, MicrophoneParamKey,
-    Mix, MuteState, OutputDevice as BasicOutputDevice, RobotRange, SampleBank, SampleButtons,
-    SamplePlaybackMode, VersionNumber, VodMode, WaterfallDirection,
+    EncoderName, EqFrequencies, FaderName, HardTuneSource, InputDevice as BasicInputDevice,
+    MicrophoneParamKey, Mix, MuteState, OutputDevice as BasicOutputDevice, RobotRange, SampleBank,
+    SampleButtons, SamplePlaybackMode, VersionNumber, VodMode, WaterfallDirection,
 };
 use goxlr_usb::animation::{AnimationMode, WaterFallDir};
 use goxlr_usb::buttonstate::{ButtonStates, Buttons};
@@ -327,6 +327,14 @@ impl<'a> Device<'a> {
                 noise_gate: self.mic_profile.noise_gate_ipc(),
                 equaliser: self.mic_profile.equalizer_ipc(),
                 equaliser_mini: self.mic_profile.equalizer_mini_ipc(),
+                eq_bandwidth: (self.hardware.device_type == DeviceType::Full).then(|| {
+                    goxlr_ipc::MicEqBandwidth {
+                        raw: EqFrequencies::iter()
+                            .map(|band| (band, self.mic_profile.eq_bandwidth(band)))
+                            .collect(),
+                        live_supported: self.device_supports_mic_eq_bandwidth(),
+                    }
+                }),
                 compressor: self.mic_profile.compressor_ipc(),
             },
             lighting: self
@@ -1991,6 +1999,22 @@ impl<'a> Device<'a> {
             GoXLRCommand::SetEqGain(gain, value) => {
                 let param = self.mic_profile.set_eq_gain(gain, value)?;
                 self.apply_effects(LinkedHashSet::from_iter([param]))?;
+            }
+            GoXLRCommand::SetMicEqBandwidth(band, raw, profile_name) => {
+                if self.hardware.device_type != DeviceType::Full {
+                    bail!("Microphone EQ bandwidth requires a full-size GoXLR");
+                }
+                if self.mic_profile.name() != profile_name {
+                    bail!("The active microphone profile changed");
+                }
+                if raw > 32 {
+                    bail!("Microphone EQ bandwidth must be between 0 and 32");
+                }
+                if self.device_supports_mic_eq_bandwidth() {
+                    self.goxlr
+                        .set_effect_values(&[(band.bandwidth_key(), i32::from(raw))])?;
+                }
+                self.mic_profile.set_eq_bandwidth(band, raw)?;
             }
             GoXLRCommand::SetEqFreq(freq, value) => {
                 let param = self.mic_profile.set_eq_freq(freq, value)?;
@@ -3905,6 +3929,9 @@ impl<'a> Device<'a> {
 
         let mut keys = LinkedHashSet::new();
         keys.extend(self.mic_profile.get_mic_keys());
+        if self.device_supports_mic_eq_bandwidth() {
+            keys.extend(EqFrequencies::iter().map(EqFrequencies::bandwidth_key));
+        }
 
         self.apply_effects(keys)?;
 
@@ -4122,6 +4149,11 @@ impl<'a> Device<'a> {
             }
         }
         Ok(())
+    }
+
+    fn device_supports_mic_eq_bandwidth(&self) -> bool {
+        // Enable only for device and firmware combinations with a verified USB audio response.
+        false
     }
 
     fn is_device_mini(&self) -> bool {

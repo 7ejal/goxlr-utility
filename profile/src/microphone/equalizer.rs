@@ -22,6 +22,7 @@ pub enum ParseError {
 // them into Gain and Freq to keep stuff tidy?
 #[derive(Debug)]
 pub struct Equalizer {
+    bandwidth: [u8; 10],
     eq_31h_gain: i8,
     eq_63h_gain: i8,
     eq_125h_gain: i8,
@@ -54,6 +55,7 @@ impl Default for Equalizer {
 impl Equalizer {
     pub fn new() -> Self {
         Self {
+            bandwidth: [16; 10],
             eq_31h_gain: 0,
             eq_63h_gain: 0,
             eq_125h_gain: 0,
@@ -77,8 +79,35 @@ impl Equalizer {
         }
     }
 
+    pub fn bandwidth(&self) -> &[u8; 10] {
+        &self.bandwidth
+    }
+
+    pub fn set_bandwidth(&mut self, band: usize, raw: u8) -> Result<()> {
+        let Some(value) = self.bandwidth.get_mut(band) else {
+            bail!("Invalid microphone EQ band");
+        };
+        if raw > 32 {
+            bail!("Microphone EQ bandwidth must be between 0 and 32");
+        }
+        *value = raw;
+        Ok(())
+    }
+
     pub fn parse_equaliser(&mut self, attributes: &Vec<Attribute>) -> Result<(), ParseError> {
         for attr in attributes {
+            if attr.name == "GOXLR_UTILITY_MIC_EQ_BANDWIDTH" {
+                let values = attr
+                    .value
+                    .split(',')
+                    .map(str::parse::<u8>)
+                    .collect::<Result<Vec<_>, _>>()?;
+                if values.len() != self.bandwidth.len() || values.iter().any(|&raw| raw > 32) {
+                    return Err(anyhow!("Invalid microphone EQ bandwidth profile data").into());
+                }
+                self.bandwidth.copy_from_slice(&values);
+            }
+
             if attr.name == "MIC_EQ_31.5HZ_GAIN" {
                 self.set_eq_31h_gain(attr.value.parse::<c_float>()? as i8)?;
             }
@@ -164,6 +193,16 @@ impl Equalizer {
     }
 
     pub fn write_equaliser(&self, attributes: &mut HashMap<String, String>) {
+        if self.bandwidth != [16; 10] {
+            attributes.insert(
+                "GOXLR_UTILITY_MIC_EQ_BANDWIDTH".to_string(),
+                self.bandwidth
+                    .iter()
+                    .map(u8::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            );
+        }
         attributes.insert(
             "MIC_EQ_31.5HZ_GAIN".to_string(),
             format!("{}", self.eq_31h_gain),

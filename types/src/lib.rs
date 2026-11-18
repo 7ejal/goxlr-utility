@@ -268,24 +268,34 @@ pub enum EffectKey {
     MicCompSelect = 0x014b,
     Equalizer31HzFrequency = 0x0126,
     Equalizer31HzGain = 0x0127,
+    Equalizer31HzBandwidth = 0x0128,
     Equalizer63HzFrequency = 0x00f8,
     Equalizer63HzGain = 0x00f9,
+    Equalizer63HzBandwidth = 0x00fa,
     Equalizer125HzFrequency = 0x0113,
     Equalizer125HzGain = 0x0114,
+    Equalizer125HzBandwidth = 0x0115,
     Equalizer250HzFrequency = 0x0129,
     Equalizer250HzGain = 0x012a,
+    Equalizer250HzBandwidth = 0x012b,
     Equalizer500HzFrequency = 0x0116,
     Equalizer500HzGain = 0x0117,
+    Equalizer500HzBandwidth = 0x0118,
     Equalizer1KHzFrequency = 0x011d,
     Equalizer1KHzGain = 0x011e,
+    Equalizer1KHzBandwidth = 0x011f,
     Equalizer2KHzFrequency = 0x012c,
     Equalizer2KHzGain = 0x012d,
+    Equalizer2KHzBandwidth = 0x012e,
     Equalizer4KHzFrequency = 0x0120,
     Equalizer4KHzGain = 0x0121,
+    Equalizer4KHzBandwidth = 0x0122,
     Equalizer8KHzFrequency = 0x0109,
     Equalizer8KHzGain = 0x010a,
+    Equalizer8KHzBandwidth = 0x010b,
     Equalizer16KHzFrequency = 0x012f,
     Equalizer16KHzGain = 0x0130,
+    Equalizer16KHzBandwidth = 0x0131,
     CompressorThreshold = 0x013d,
     CompressorRatio = 0x013c,
     CompressorAttack = 0x013e,
@@ -586,6 +596,23 @@ pub enum EqFrequencies {
     Equalizer4KHz,
     Equalizer8KHz,
     Equalizer16KHz,
+}
+
+impl EqFrequencies {
+    pub fn bandwidth_key(self) -> EffectKey {
+        match self {
+            Self::Equalizer31Hz => EffectKey::Equalizer31HzBandwidth,
+            Self::Equalizer63Hz => EffectKey::Equalizer63HzBandwidth,
+            Self::Equalizer125Hz => EffectKey::Equalizer125HzBandwidth,
+            Self::Equalizer250Hz => EffectKey::Equalizer250HzBandwidth,
+            Self::Equalizer500Hz => EffectKey::Equalizer500HzBandwidth,
+            Self::Equalizer1KHz => EffectKey::Equalizer1KHzBandwidth,
+            Self::Equalizer2KHz => EffectKey::Equalizer2KHzBandwidth,
+            Self::Equalizer4KHz => EffectKey::Equalizer4KHzBandwidth,
+            Self::Equalizer8KHz => EffectKey::Equalizer8KHzBandwidth,
+            Self::Equalizer16KHz => EffectKey::Equalizer16KHzBandwidth,
+        }
+    }
 }
 
 /*

@@ -204,6 +204,16 @@ impl MicProfileAdapter {
         }
     }
 
+    pub fn eq_bandwidth(&self, band: EqFrequencies) -> u8 {
+        self.profile.equalizer().bandwidth()[band as usize]
+    }
+
+    pub fn set_eq_bandwidth(&mut self, band: EqFrequencies, raw: u8) -> Result<()> {
+        self.profile
+            .equalizer_mut()
+            .set_bandwidth(band as usize, raw)
+    }
+
     pub fn equalizer_ipc(&self) -> Equaliser {
         let mut gains: HashMap<EqFrequencies, i8> = Default::default();
         for freq in EqFrequencies::iter() {
@@ -800,6 +810,36 @@ impl MicProfileAdapter {
             EffectKey::GateRelease => self.profile.gate().release().into(),
             EffectKey::MicCompSelect => self.profile.comp_select().into(),
 
+            EffectKey::Equalizer31HzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer31Hz).into()
+            }
+            EffectKey::Equalizer63HzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer63Hz).into()
+            }
+            EffectKey::Equalizer125HzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer125Hz).into()
+            }
+            EffectKey::Equalizer250HzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer250Hz).into()
+            }
+            EffectKey::Equalizer500HzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer500Hz).into()
+            }
+            EffectKey::Equalizer1KHzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer1KHz).into()
+            }
+            EffectKey::Equalizer2KHzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer2KHz).into()
+            }
+            EffectKey::Equalizer4KHzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer4KHz).into()
+            }
+            EffectKey::Equalizer8KHzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer8KHz).into()
+            }
+            EffectKey::Equalizer16KHzBandwidth => {
+                self.eq_bandwidth(EqFrequencies::Equalizer16KHz).into()
+            }
             EffectKey::Equalizer31HzFrequency => self.profile.equalizer().eq_31h_freq_as_goxlr(),
             EffectKey::Equalizer63HzFrequency => self.profile.equalizer().eq_63h_freq_as_goxlr(),
             EffectKey::Equalizer125HzFrequency => self.profile.equalizer().eq_125h_freq_as_goxlr(),

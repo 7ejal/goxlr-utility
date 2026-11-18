@@ -277,3 +277,38 @@ impl MicProfileSettings {
         self.comp_select = comp_select;
     }
 }
+
+#[cfg(test)]
+mod mic_eq_bandwidth_tests {
+    use super::*;
+
+    #[test]
+    fn microphone_profile_bandwidth_round_trips_with_legacy_defaults() {
+        const ATTRIBUTE: &str = "GOXLR_UTILITY_MIC_EQ_BANDWIDTH";
+        let mut profile = MicProfileSettings::load(
+            b"<MicProfileTree><dspTreeMicProfile/></MicProfileTree>".as_slice(),
+        )
+        .unwrap();
+        assert_eq!(profile.equalizer().bandwidth(), &[16; 10]);
+
+        let mut xml = Vec::new();
+        profile.write_to(&mut xml).unwrap();
+        assert!(!std::str::from_utf8(&xml).unwrap().contains(ATTRIBUTE));
+
+        profile.equalizer_mut().set_bandwidth(0, 0).unwrap();
+        profile.equalizer_mut().set_bandwidth(9, 32).unwrap();
+        assert!(profile.equalizer_mut().set_bandwidth(9, 33).is_err());
+        assert!(profile.equalizer_mut().set_bandwidth(10, 16).is_err());
+
+        xml.clear();
+        profile.write_to(&mut xml).unwrap();
+        let recovered = MicProfileSettings::load(xml.as_slice()).unwrap();
+        assert_eq!(
+            recovered.equalizer().bandwidth(),
+            &[0, 16, 16, 16, 16, 16, 16, 16, 16, 32]
+        );
+
+        let invalid = std::str::from_utf8(&xml).unwrap().replace(",32", ",33");
+        assert!(MicProfileSettings::load(invalid.as_bytes()).is_err());
+    }
+}

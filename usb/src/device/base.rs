@@ -228,13 +228,10 @@ pub trait GoXLRCommands: ExecutableGoXLR {
     }
 
     fn set_effect_values(&mut self, effects: &[(EffectKey, i32)]) -> Result<()> {
-        let mut data = Vec::with_capacity(effects.len() * 8);
-        let mut cursor = Cursor::new(&mut data);
-        for (key, value) in effects {
-            cursor.write_u32::<LittleEndian>(*key as u32)?;
-            cursor.write_i32::<LittleEndian>(*value)?;
-        }
-        self.request_data(Command::SetEffectParameters, &data)?;
+        self.request_data(
+            Command::SetEffectParameters,
+            &effect_parameter_bytes(effects),
+        )?;
 
         Ok(())
     }
@@ -585,5 +582,54 @@ impl UsbData {
     }
     pub fn product_name(&self) -> String {
         self.product_name.clone()
+    }
+}
+
+fn effect_parameter_bytes(effects: &[(EffectKey, i32)]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(effects.len() * 8);
+    for &(key, value) in effects {
+        data.extend_from_slice(&(key as u32).to_le_bytes());
+        data.extend_from_slice(&value.to_le_bytes());
+    }
+    data
+}
+
+#[cfg(test)]
+mod mic_eq_bandwidth_tests {
+    use super::*;
+    use goxlr_types::EqFrequencies::*;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn bandwidth_keys_and_effect_packet_bytes_match_stock() {
+        let bands = [
+            Equalizer31Hz,
+            Equalizer63Hz,
+            Equalizer125Hz,
+            Equalizer250Hz,
+            Equalizer500Hz,
+            Equalizer1KHz,
+            Equalizer2KHz,
+            Equalizer4KHz,
+            Equalizer8KHz,
+            Equalizer16KHz,
+        ];
+        assert_eq!(
+            goxlr_types::EqFrequencies::iter().collect::<Vec<_>>(),
+            bands
+        );
+        let keys: [u32; 10] = [
+            0x128, 0xfa, 0x115, 0x12b, 0x118, 0x11f, 0x12e, 0x122, 0x10b, 0x131,
+        ];
+        assert_eq!(Command::SetEffectParameters.command_id(), 0x0080_1000);
+        for (band, key) in bands.into_iter().zip(keys) {
+            for raw in 0i32..=32 {
+                let expected = [key.to_le_bytes(), raw.to_le_bytes()].concat();
+                assert_eq!(
+                    effect_parameter_bytes(&[(band.bandwidth_key(), raw)]),
+                    expected
+                );
+            }
+        }
     }
 }
