@@ -6,6 +6,7 @@ on:
       - 'daemon/web-content/index.html'
       - 'daemon/web-content/assets/index-BJM830Pw*.js'
       - 'headphone-eq-tests/**'
+      - 'research/utility-protocol/**'
       - 'daemon/src/servers/eq11_lab.rs'
       - 'daemon/src/servers/http_server.rs'
       - '.github/workflows/headphone-eq-lab.yml'
@@ -15,6 +16,7 @@ on:
       - 'daemon/web-content/index.html'
       - 'daemon/web-content/assets/index-BJM830Pw*.js'
       - 'headphone-eq-tests/**'
+      - 'research/utility-protocol/**'
       - 'daemon/src/servers/eq11_lab.rs'
       - 'daemon/src/servers/http_server.rs'
       - '.github/workflows/headphone-eq-lab.yml'
@@ -41,3 +43,5 @@ jobs:
         run: |
           rustc --edition 2024 --test daemon/src/servers/eq11_lab.rs -o /tmp/eq11-lab-tests
           /tmp/eq11-lab-tests
+      - name: Offline USB packet decoder regression
+        run: python3 -m unittest discover -s research/utility-protocol -p 'test_*.py' -v
