@@ -179,3 +179,16 @@ binary fixture decoded by Rust. Firmware 904 remains emulator-only.
 Original DSP dispatch P:0001C2..1C6 was also successfully exercised on
 the Windows JIT with a synthetic Y:0008 callback node targeting 005FF2.
 That independent harness is not an integrated real scheduler or PCB path.
+
+## Further verification (2026-11-18)
+Corrected three new Clippy chunks_exact warnings using as_chunks. Local
+cargo clippy --locked -p goxlr-daemon --all-targets -- -D warnings passed
+(default features); full multi-platform CI still requires confirmation.
+Host reference model retains history during unchanged coefficient generation,
+resets it on a new bank; no click-free hardware update claim. 1000 valid
+updates alternating EQ and bypass, 1000 corrupted packets rejected, plus
+1000 following blocks preserve the other candidate lanes. Six Rust tests
+and thirteen Node tests passed. Original ISR + 4C74/4C7E list dispatcher
+also successfully entered the serialized wrapper through a synthetic
+one-child graph in Windows JIT and reached synthetic continuation.
+This is emphatically not actual live graph registration or headphone mapping.

@@ -37,7 +37,7 @@ fn decode(bytes: &[u8]) -> Result<Bank, &'static str> {
         return Err("Preamp must be <= unity");
     }
     let mut words = [0; WORDS];
-    for (word, data) in words.iter_mut().zip(bytes[12..372].chunks_exact(3)) {
+    for (word, data) in words.iter_mut().zip(bytes[12..372].as_chunks::<3>().0) {
         let raw = i32::from_be_bytes([0, data[0], data[1], data[2]]);
         *word = if raw & 0x800000 != 0 {
             raw - 0x1000000
@@ -45,11 +45,11 @@ fn decode(bytes: &[u8]) -> Result<Bank, &'static str> {
             raw
         };
     }
-    for channel in words.chunks_exact(60) {
+    for channel in words.as_chunks::<60>().0 {
         if channel[55..60] != [0, 0, 0x080000, 0, 0] {
             return Err("Twelfth section must be the exact stock identity");
         }
-        for section in channel.chunks_exact(5) {
+        for section in channel.as_chunks::<5>().0 {
             let d = i64::from(section[3]);
             let e = i64::from(section[4]);
             // Stock layout: f1=-2e/Q23; f2=-d/Q23. Jury stability.
@@ -70,6 +70,7 @@ pub(crate) struct Eq11Lab {
     pending: Option<Bank>,
     active: Option<Bank>,
     generation: u64,
+    history: [[[f64; 4]; 12]; 2],
 }
 
 pub(crate) struct LabResult {
@@ -90,16 +91,16 @@ impl Eq11Lab {
         // No partially updated coefficient bank can become active.
         if let Some(bank) = self.pending.take() {
             self.active = Some(bank);
+            self.history = [[[0.0; 4]; 12]; 2];
             self.generation = self.generation.saturating_add(1);
         }
         let Some(bank) = self.active else { return };
         if !bank.enabled {
             return;
         }
-        // Float reference model, fresh history per synthetic test block.
-        // NOT a DSP-native or click-free real-time implementation.
-        for ch in 0..2 {
-            let mut history = [[0.0f64; 4]; 12];
+        // Float reference model. History is continuous within a generation.
+        // Reset on coefficient changes; NOT a click-free implementation.
+        for (ch, history) in self.history.iter_mut().enumerate() {
             for frame in block.iter_mut() {
                 let mut input = f64::from(frame[ch]) * f64::from(bank.preamp) / Q23 as f64;
                 for (index, h) in history.iter_mut().enumerate() {
@@ -217,6 +218,51 @@ mod tests {
         assert_eq!(r.generation, 1);
         assert!(r.changed_samples.iter().all(|&n| n > 0));
         assert!(r.other_lanes_unchanged);
+    }
+    #[test]
+    fn repeated_updates_and_corruption_stress() {
+        let fixture = include_bytes!("../../../headphone-eq-tests/eq11-update-fixture.bin");
+        let mut lab = Eq11Lab::default();
+        for i in 0..1000u64 {
+            let valid = if i % 2 == 0 {
+                *fixture
+            } else {
+                packet(false, 1 << 23)
+            };
+            let r = lab.run_update(&valid).unwrap();
+            assert_eq!(r.generation, i + 1);
+            assert!(r.other_lanes_unchanged);
+            let mut damaged = valid;
+            let index = (i as usize * 17) % 372;
+            damaged[index] ^= 1;
+            assert!(lab.stage(&damaged).is_err());
+            assert!(lab.pending.is_none());
+            assert_eq!(lab.generation, i + 1);
+            let mut block = [[120000, -90000, 12345, -23456]; 64];
+            lab.process(&mut block);
+            assert_eq!(lab.generation, i + 1);
+            assert!(block.iter().all(|f| f[2..] == [12345, -23456]));
+            if i % 2 == 1 {
+                assert_eq!(block, [[120000, -90000, 12345, -23456]; 64]);
+            }
+        }
+    }
+    #[test]
+    fn filter_history_continues_between_blocks_without_update() {
+        let mut lab = Eq11Lab::default();
+        lab.stage(include_bytes!(
+            "../../../headphone-eq-tests/eq11-update-fixture.bin"
+        ))
+        .unwrap();
+        let mut impulse = [[0; 4]; 64];
+        impulse[63] = [1000000, -1000000, 0, 0];
+        lab.process(&mut impulse);
+        let mut tail = [[0; 4]; 64];
+        lab.process(&mut tail);
+        assert!(tail.iter().any(|f| f[0] != 0));
+        assert!(tail.iter().any(|f| f[1] != 0));
+        assert!(tail.iter().all(|f| f[2..] == [0, 0]));
+        assert_eq!(lab.generation, 1);
     }
     #[test]
     fn crc_known_vector_and_successive_stereo_updates() {
