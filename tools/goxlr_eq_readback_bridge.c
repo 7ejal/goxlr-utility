@@ -48,7 +48,7 @@ static void expire(EqReadback *state, uint32_t now)
 /* Caller must reserve room for the entire frame before starting a request.
  * After a timeout, reinitialize state only when the old reply cannot arrive.
  * The stock response carries a key but has no transaction ID. */
-bool goxlr_eq_query(EqReadback *state, uint16_t key, uint32_t now,
+static bool goxlr_eq_query(EqReadback *state, uint16_t key, uint32_t now,
                     uint32_t timeout, uint8_t frame[10])
 {
     expire(state, now);
@@ -70,7 +70,7 @@ bool goxlr_eq_query(EqReadback *state, uint16_t key, uint32_t now,
 }
 
 /* The stock handler retains ownership of status messages and unrelated data. */
-bool goxlr_eq_receive(EqReadback *state, uint32_t word, uint32_t now)
+static bool goxlr_eq_receive(EqReadback *state, uint32_t word, uint32_t now)
 {
     expire(state, now);
     if (!state->pending)
@@ -118,7 +118,7 @@ bool goxlr_eq_receive(EqReadback *state, uint32_t word, uint32_t now)
     return false;
 }
 
-bool goxlr_eq_take_reply(EqReadback *state, int32_t *value)
+static bool goxlr_eq_take_reply(EqReadback *state, int32_t *value)
 {
     if (!state->ready)
         return false;
@@ -130,7 +130,7 @@ bool goxlr_eq_take_reply(EqReadback *state, int32_t *value)
 /* The USB dispatcher and SHI receive observer must serialize state access.
  * The enqueuer takes one complete frame through the existing ARM ring owner.
  * It must return false without enqueueing bytes if capacity is insufficient. */
-uint8_t goxlr_eq_usb_submit(EqReadback *state, const uint8_t *request, unsigned length,
+static uint8_t goxlr_eq_usb_submit(EqReadback *state, const uint8_t *request, unsigned length,
                             uint32_t now, uint32_t timeout,
                             bool (*enqueue)(const uint8_t *, unsigned))
 {
@@ -158,7 +158,7 @@ uint8_t goxlr_eq_usb_submit(EqReadback *state, const uint8_t *request, unsigned 
 
 /* Query completion payload is key LE16 followed by raw value LE32.
  * Only EQ_USB_OK returns a payload. Polling neither waits nor touches SHI. */
-uint8_t goxlr_eq_usb_poll(EqReadback *state, uint32_t now, uint8_t reply[6])
+static uint8_t goxlr_eq_usb_poll(EqReadback *state, uint32_t now, uint8_t reply[6])
 {
     expire(state, now);
     if (state->needs_resync)

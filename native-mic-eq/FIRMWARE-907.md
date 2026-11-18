@@ -32,6 +32,8 @@ The stock 1 kHz control test changed gain from +1 to +7 dB and produced +5.99 dB
 
 ### ARM integration work
 
+The subsequent [placement audit](ARM-PLACEMENT.md) recovers startup clearing, stack pointers and heap initialization, and measures the smaller internal-helper Thumb build.
+
 - The C bridge exposes nonblocking USB submit and poll entry points for proposed commands `0x00819000` and `0x00819001`. Submit takes a two-byte little-endian key. The enqueue callback must reserve space for the complete query and use the stock ring owner. USB reply bodies start with one status byte. A successful poll appends the echoed key and the signed raw value. The Rust `experimental_eq` module validates poll payloads and creates stock effect-write records for all 36 fields. It does not dispatch USB commands.
 - Registration at `0xB328` follows the stock loop at `0xB314–0xB324`, which registers 24 sixteen-byte nodes from `0x38E18` through `0x26384`. The trampoline prototype adds a writable node for group `0x819` after the stock entries. The receive trampoline targets VA `0xA624`. It forwards the three received bytes, restores registers and CPSR flags, replays the displaced `ldrb r3, [sp, #4]`, and resumes at `0xA628`. The isolated ARM emulator checks passed for both observer stack alignments and the registration return with mocked callees.
 - The combined ARMv5TE object has 1,348 bytes of text, 16 bytes of initialized data and 20 bytes of zero-initialized state. The largest zero-filled run in the initialized ARM file span is 1,063 bytes at `0x394CD–0x398F4`. Stock code references VA `0x39680` inside that range. Executable placement and writable-state ownership remain unresolved, as do the board bindings for the lock, monotonic timeout and stock ring enqueue.
