@@ -2,7 +2,7 @@
 
 This is a fork-only feature, not part of the official upstream utility.
 
-Open the GoXLR Utility daemon's local web page and select Headphone EQ Lab,
+Open the GoXLR Utility daemon's local web page and select the Headphones EQ tab,
 or navigate directly to:
 
 http://127.0.0.1:14564/headphone-eq/index.html
@@ -120,3 +120,21 @@ some file:// origins, and the read-only device-status button cannot be relied
 on outside the installed local daemon. This is NOT hardware EQ or an
 installer, and does not change the actual GoXLR sound.
 Rebuild using python3 headphone-eq-tests/build_standalone.py.
+
+## Integrated device tab (2026-11-18)
+
+The EQ editor is now embedded inside the existing Vue device settings tab list,
+after System, rather than requiring external navigation or a separate window.
+Existing tabs and keyboard shortcut indices remain unchanged. It uses the
+same-origin EQ editor in an iframe; switching tabs retains browser-local
+profiles. The direct editor URL still works.
+
+The fork ships a reproducible hash-pinned patch to the original prebuilt UI
+bundle. Run python3 headphone-eq-tests/integrate_tab.py to regenerate it.
+The original bundle is retained unchanged. The integration test removes the
+single extra render expression and compares the result against the original.
+No upstream submission is made.
+
+10 local Node tests passed (including tab render expression and original-byte
+preservation); actual browser/device UI operation and the new Windows binary
+are not yet validated. No new DSP protocol or audio apply function is enabled.

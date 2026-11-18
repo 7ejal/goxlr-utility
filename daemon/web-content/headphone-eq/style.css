@@ -3,3 +3,6 @@
 /* EQ center frequency is fully editable per band and per stereo channel. */
 .freqrow input[type=number]{width:65px;min-width:53px;font-size:11px;padding:6px 4px;text-align:right}
 .bandrow{grid-template-columns:119px minmax(90px,1fr) 62px 20px}
+
+/* In-app view uses the existing native tab navigation, no secondary back link. */
+body.embedded{background:#15161c}body.embedded .layout{max-width:none;padding:12px}body.embedded .back,body.embedded .openapp{display:none}body.embedded .header{justify-content:space-between}

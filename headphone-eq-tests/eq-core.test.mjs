@@ -74,10 +74,31 @@ test("App is locally served and never sends device mutation commands",async()=>{
   const app=await readFile(new URL("../daemon/web-content/headphone-eq/app.mjs",import.meta.url),"utf-8");
   const main=await readFile(new URL("../daemon/web-content/index.html",import.meta.url),"utf-8");
   const page=await readFile(new URL("../daemon/web-content/headphone-eq/index.html",import.meta.url),"utf-8");
-  assert.match(main,/href="\/headphone-eq\/index.html"/);
+  assert.match(main,/index-BJM830Pw-headphone-eq\.js/);
   assert.match(page,/app\.mjs/);
   assert.match(app,/JSON\.stringify\("GetStatus"\)/);
   assert.match(app,/data-field="freq"/);
   assert.match(app,/value<20\|\|value>20000/);
   assert.doesNotMatch(app,/\/firmware-upload|SetRouting|SetEqGain|RunFirmwareUpdate/);
+});
+
+test("Headphones EQ is an appended native tab and original bundled UI is unchanged outside insertion",async()=>{
+  const {readFile}=await import("node:fs/promises");
+  const base=new URL("../daemon/web-content/assets/",import.meta.url);
+  const original=await readFile(new URL("index-BJM830Pw.js",base),"utf-8");
+  const patched=await readFile(new URL("index-BJM830Pw-headphone-eq.js",base),"utf-8");
+  const marker=',v(d,{id:"headphone-eq",name:"Headphones EQ"}';
+  const at=patched.indexOf(marker);
+  assert.ok(at>0);
+  assert.equal(patched.indexOf(marker,at+1),-1);
+  const end=patched.indexOf(')]),_:1},8,["onOnChange","label"])',at);
+  // The complete injected tab is exactly the generated render expression.
+  const insert=',v(d,{id:"headphone-eq",name:"Headphones EQ"},{default:z(()=>[k("iframe",{src:"/headphone-eq/index.html?embedded=1",title:"Headphones EQ",style:"display:block;width:100%;height: min(1100px, 85vh);min-height:480px;border:0;background:#0c0d11;border-radius:8px;"})]),_:1})';
+  assert.equal(patched.replace(insert,""),original);
+  assert.ok(at>patched.indexOf('v(d,{id:"system",name:e.$t("message.navigation.system")}'));
+  const render = new Function("v","d","z","k","return ["+insert.slice(1)+"]");
+  const tab = render((type,props,slots)=>({type,props,slots}),"Tab",fn=>fn,(tag,props)=>({tag,props}))[0];
+  assert.equal(tab.props.id,"headphone-eq");
+  assert.equal(tab.slots.default()[0].tag,"iframe");
+  assert.equal(tab.slots.default()[0].props.src,"/headphone-eq/index.html?embedded=1");
 });

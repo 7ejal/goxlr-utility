@@ -4,12 +4,14 @@ on:
     paths:
       - 'daemon/web-content/headphone-eq/**'
       - 'daemon/web-content/index.html'
+      - 'daemon/web-content/assets/index-BJM830Pw*.js'
       - 'headphone-eq-tests/**'
       - '.github/workflows/headphone-eq-lab.yml'
   pull_request:
     paths:
       - 'daemon/web-content/headphone-eq/**'
       - 'daemon/web-content/index.html'
+      - 'daemon/web-content/assets/index-BJM830Pw*.js'
       - 'headphone-eq-tests/**'
       - '.github/workflows/headphone-eq-lab.yml'
 jobs:
@@ -25,5 +27,8 @@ jobs:
         run: |
           node --check daemon/web-content/headphone-eq/eq-core.mjs
           node --check daemon/web-content/headphone-eq/app.mjs
+          node --check daemon/web-content/assets/index-BJM830Pw-headphone-eq.js
+          python3 headphone-eq-tests/integrate_tab.py
+          git diff --exit-code
       - name: Offline EQ regression and Python compiler parity fixture
         run: node --test headphone-eq-tests/eq-core.test.mjs

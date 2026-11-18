@@ -1,6 +1,8 @@
 import {flat,validate,compile,apo,bank,preset,ENDPOINTS} from "./eq-core.mjs";
 const $=id=>document.getElementById(id);
 const STORAGE="goxlr-headphone-eq-lab-v1";
+const embedded = new URLSearchParams(window.location.search).get("embedded")==="1" && window.parent!==window;
+if(embedded) document.body.classList.add("embedded");
 let profile=flat(),side="linked",current=null,saveTimeout=0;
 try{const data=JSON.parse(localStorage.getItem(STORAGE));if(data)profile=validate(data);}catch{localStorage.removeItem(STORAGE);}
 const error=message=>{const el=$("error");el.textContent=message;el.hidden=false;setTimeout(()=>el.hidden=true,6500);};
@@ -152,3 +154,5 @@ $("checkDevice").addEventListener("click",async()=>{
   }
 });
 refresh();
+
+window.addEventListener("pagehide",()=>{clearTimeout(saveTimeout);save();});
