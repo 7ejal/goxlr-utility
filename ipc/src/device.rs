@@ -153,8 +153,16 @@ pub struct MicSettings {
 
     pub equaliser: Equaliser,
     pub equaliser_mini: EqualiserMini,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eq_bandwidth: Option<MicEqBandwidth>,
     pub noise_gate: NoiseGate,
     pub compressor: Compressor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MicEqBandwidth {
+    pub raw: HashMap<EqFrequencies, u8>,
+    pub live_supported: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

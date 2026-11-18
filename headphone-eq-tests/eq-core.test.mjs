@@ -94,7 +94,9 @@ test("Headphones EQ is an appended native tab and original bundled UI is unchang
   const end=patched.indexOf(')]),_:1},8,["onOnChange","label"])',at);
   // The complete injected tab is exactly the generated render expression.
   const insert=',v(d,{id:"headphone-eq",name:"Headphones EQ"},{default:z(()=>[k("iframe",{src:"/headphone-eq/index.html?embedded=1",title:"Headphones EQ",style:"display:block;width:100%;height: min(1100px, 85vh);min-height:480px;border:0;background:#0c0d11;border-radius:8px;"})]),_:1})';
-  assert.equal(patched.replace(insert,""),original);
+  const bandwidth = ",n.isDeviceMini()?Le(\"\",!0):k(\"iframe\",{src:\"/mic-bandwidth/index.html?device=\"+encodeURIComponent(c.getActiveSerial()),title:\"Microphone EQ bandwidth\",style:\"display:block;width:100%;height:350px;border:0;\"})";
+  assert.equal(patched.split(bandwidth).length, 2);
+  assert.ok(patched.replace(bandwidth, "").replace(insert, "") === original.replaceAll("\r\n", "\n"));
   assert.ok(at>patched.indexOf('v(d,{id:"system",name:e.$t("message.navigation.system")}'));
   const render = new Function("v","d","z","k","return ["+insert.slice(1)+"]");
   const tab = render((type,props,slots)=>({type,props,slots}),"Tab",fn=>fn,(tag,props)=>({tag,props}))[0];
