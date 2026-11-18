@@ -43,6 +43,7 @@ impl Client for WebClient {
             DaemonResponse::MicLevel(_level) => {
                 bail!("Received Mic Level as response, shouldn't happen!")
             }
+            DaemonResponse::MicEqParameter(_) => bail!("Unexpected DSP EQ readback response"),
             DaemonResponse::Patch(_patch) => {
                 bail!("Received Patch as response, shouldn't happen!")
             }

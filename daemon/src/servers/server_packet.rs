@@ -61,6 +61,18 @@ pub async fn handle_packet(
             Ok(DaemonResponse::Ok)
         }
 
+        DaemonRequest::ReadMicEqParameter(serial, band, field) => {
+            let (tx, rx) = oneshot::channel();
+            usb_tx
+                .send(DeviceCommand::ReadMicEqParameter(serial, band, field, tx))
+                .await
+                .map_err(|e| anyhow!(e.to_string()))
+                .context("Could not communicate with the GoXLR device")?;
+            Ok(DaemonResponse::MicEqParameter(
+                rx.await.context("Could not read the DSP EQ parameter")??,
+            ))
+        }
+
         DaemonRequest::RunFirmwareUpdate(serial, path, force) => {
             let (tx, rx) = oneshot::channel();
             usb_tx

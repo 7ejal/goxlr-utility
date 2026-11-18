@@ -1842,6 +1842,35 @@ impl<'a> Device<'a> {
         Ok(db)
     }
 
+    pub async fn read_mic_eq_parameter(
+        &mut self,
+        band: u8,
+        field: goxlr_types::MicEqField,
+    ) -> Result<i32> {
+        use goxlr_usb::experimental_eq::{EqParameter, EqReadback};
+
+        let parameter = EqParameter::new(usize::from(band), field)?;
+        if self.hardware.device_type != DeviceType::Full || !self.device_supports_eq_readback() {
+            bail!("Live EQ readback requires hardware-validated bridge firmware");
+        }
+        self.goxlr.submit_eq_read(parameter)?;
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            match self.goxlr.poll_eq_read(parameter)? {
+                EqReadback::Value(raw) => return Ok(raw),
+                EqReadback::Pending if Instant::now() < deadline => {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                EqReadback::Pending => {
+                    bail!("EQ readback timed out. Resynchronize before retrying")
+                }
+                EqReadback::NeedsResync => bail!("EQ bridge requires readback resynchronization"),
+                EqReadback::Busy => bail!("EQ bridge is busy"),
+                EqReadback::Idle => bail!("EQ bridge lost the pending read"),
+            }
+        }
+    }
+
     pub fn get_hardware_type(&mut self) -> DeviceType {
         self.hardware.device_type
     }
@@ -2015,6 +2044,27 @@ impl<'a> Device<'a> {
                         .set_effect_values(&[(band.bandwidth_key(), i32::from(raw))])?;
                 }
                 self.mic_profile.set_eq_bandwidth(band, raw)?;
+            }
+            GoXLRCommand::SetMicEqParameter {
+                band,
+                field,
+                raw,
+                expected_raw,
+                profile_name,
+            } => {
+                let parameter =
+                    goxlr_usb::experimental_eq::EqParameter::new(usize::from(band), field)?;
+                parameter.effect_write(raw)?;
+                if self.mic_profile.name() != profile_name {
+                    bail!("The active microphone profile changed");
+                }
+                if self.read_mic_eq_parameter(band, field).await? != expected_raw {
+                    bail!("The active DSP parameter changed. Read it again before applying");
+                }
+                self.goxlr.set_eq_parameter(parameter, raw)?;
+                if self.read_mic_eq_parameter(band, field).await? != raw {
+                    bail!("DSP readback did not match the requested EQ parameter");
+                }
             }
             GoXLRCommand::SetEqFreq(freq, value) => {
                 let param = self.mic_profile.set_eq_freq(freq, value)?;
@@ -4149,6 +4199,11 @@ impl<'a> Device<'a> {
             }
         }
         Ok(())
+    }
+
+    fn device_supports_eq_readback(&self) -> bool {
+        // Enable only after this bridge's USB transport and physical EQ tests pass.
+        false
     }
 
     fn device_supports_mic_eq_bandwidth(&self) -> bool {

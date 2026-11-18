@@ -598,6 +598,15 @@ pub enum EqFrequencies {
     Equalizer16KHz,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u16)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum MicEqField {
+    Frequency,
+    Gain,
+    Width,
+}
+
 impl EqFrequencies {
     pub fn bandwidth_key(self) -> EffectKey {
         match self {

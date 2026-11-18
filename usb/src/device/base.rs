@@ -47,6 +47,32 @@ pub trait ExecutableGoXLR {
 
 // These are commands that can be executed, but perform_request must be implemented..
 pub trait GoXLRCommands: ExecutableGoXLR {
+    fn submit_eq_read(&mut self, parameter: crate::experimental_eq::EqParameter) -> Result<()> {
+        let reply = self.request_data(Command::SubmitEqRead, &parameter.read_request())?;
+        match reply.as_slice() {
+            [0] => Ok(()),
+            [2] => bail!("EQ bridge is busy"),
+            [4] => bail!("EQ bridge requires readback resynchronization"),
+            _ => bail!("EQ bridge rejected the read request"),
+        }
+    }
+
+    fn poll_eq_read(
+        &mut self,
+        parameter: crate::experimental_eq::EqParameter,
+    ) -> Result<crate::experimental_eq::EqReadback> {
+        parameter.poll_reply(&self.request_data(Command::PollEqRead, &[])?)
+    }
+
+    fn set_eq_parameter(
+        &mut self,
+        parameter: crate::experimental_eq::EqParameter,
+        raw: i32,
+    ) -> Result<()> {
+        self.request_data(Command::SetEffectParameters, &parameter.effect_write(raw)?)?;
+        Ok(())
+    }
+
     fn supports_dcp_category(&mut self, category: DCPCategory) -> Result<bool> {
         let mut out = [0; 2];
         LittleEndian::write_u16(&mut out, category.id());

@@ -44,6 +44,12 @@ pub enum DeviceCommand {
     RunDaemonCommand(DaemonCommand, oneshot::Sender<Result<()>>),
     RunDeviceCommand(String, GoXLRCommand, oneshot::Sender<Result<()>>),
     GetDeviceMicLevel(String, oneshot::Sender<Result<f64>>),
+    ReadMicEqParameter(
+        String,
+        u8,
+        goxlr_types::MicEqField,
+        oneshot::Sender<Result<i32>>,
+    ),
     RunFirmwareUpdate(String, Option<PathBuf>, bool, oneshot::Sender<Result<()>>),
     ContinueFirmwareUpdate(String, oneshot::Sender<Result<()>>),
     ClearFirmwareState(String, oneshot::Sender<Result<()>>),
@@ -517,6 +523,15 @@ pub async fn spawn_usb_handler(
                         } else {
                             let _ = sender.send(Err(anyhow!("Device {} is not connected", serial)));
                         }
+                    },
+
+                    DeviceCommand::ReadMicEqParameter(serial, band, field, sender) => {
+                        let result = if let Some(device) = devices.get_mut(&serial) {
+                            device.read_mic_eq_parameter(band, field).await
+                        } else {
+                            Err(anyhow!("Device {} is not connected", serial))
+                        };
+                        let _ = sender.send(result);
                     },
 
                     DeviceCommand::RunFirmwareUpdate(serial, file, force, sender) => {

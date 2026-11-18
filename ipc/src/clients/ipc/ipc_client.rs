@@ -19,22 +19,44 @@ impl IPCClient {
             http_settings: Default::default(),
         }
     }
+
+    pub async fn read_mic_eq_parameter(
+        &mut self,
+        serial: &str,
+        band: u8,
+        field: goxlr_types::MicEqField,
+    ) -> Result<i32> {
+        match self
+            .request(DaemonRequest::ReadMicEqParameter(
+                serial.into(),
+                band,
+                field,
+            ))
+            .await?
+        {
+            DaemonResponse::MicEqParameter(raw) => Ok(raw),
+            DaemonResponse::Error(error) => Err(anyhow!(error)),
+            _ => bail!("Unexpected DSP EQ readback response"),
+        }
+    }
+
+    async fn request(&mut self, request: DaemonRequest) -> Result<DaemonResponse> {
+        self.socket
+            .send(request)
+            .await
+            .context("Failed to send a command to the GoXLR daemon process")?;
+        self.socket
+            .read()
+            .await
+            .context("Failed to retrieve the command result from the GoXLR daemon process")?
+            .context("Failed to parse the command result from the GoXLR daemon process")
+    }
 }
 
 #[async_trait]
 impl Client for IPCClient {
     async fn send(&mut self, request: DaemonRequest) -> Result<()> {
-        self.socket
-            .send(request)
-            .await
-            .context("Failed to send a command to the GoXLR daemon process")?;
-        let result = self
-            .socket
-            .read()
-            .await
-            .context("Failed to retrieve the command result from the GoXLR daemon process")?
-            .context("Failed to parse the command result from the GoXLR daemon process")?;
-
+        let result = self.request(request).await?;
         match result {
             DaemonResponse::Status(status) => {
                 self.status = status.clone();
@@ -46,6 +68,7 @@ impl Client for IPCClient {
             DaemonResponse::MicLevel(_level) => {
                 bail!("Received Mic Level as Response, shouldn't happen!");
             }
+            DaemonResponse::MicEqParameter(_) => bail!("Unexpected DSP EQ readback response"),
             DaemonResponse::Patch(_patch) => {
                 Err(anyhow!("Received Patch as response, shouldn't happen!"))
             }

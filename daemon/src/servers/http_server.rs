@@ -200,6 +200,12 @@ async fn websocket(
                                                         data: DaemonResponse::MicLevel(level),
                                                     })
                                                 }
+                                                DaemonResponse::MicEqParameter(raw) => {
+                                                    WsResponse(WebsocketResponse {
+                                                        id: request_id,
+                                                        data: DaemonResponse::MicEqParameter(raw),
+                                                    })
+                                                }
                                                 _ => {
                                                     // This should never fucking happen
                                                     break Some(CloseReason {

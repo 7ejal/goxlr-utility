@@ -10,13 +10,7 @@ const BAND_KEYS: [u16; 12] = [
     0x126, 0xf8, 0x113, 0x129, 0x116, 0x11d, 0x12c, 0x120, 0x109, 0x12f, 0xf5, 0x10c,
 ];
 
-#[derive(Clone, Copy, Debug)]
-#[repr(u16)]
-pub enum EqField {
-    Frequency,
-    Gain,
-    Width,
-}
+pub use goxlr_types::MicEqField as EqField;
 
 #[derive(Clone, Copy, Debug)]
 pub struct EqParameter {
@@ -35,7 +29,10 @@ pub enum EqReadback {
 
 impl EqParameter {
     pub fn new(band: usize, field: EqField) -> Result<Self> {
-        ensure!((1..=BAND_KEYS.len()).contains(&band), "EQ band must be 1–12");
+        ensure!(
+            (1..=BAND_KEYS.len()).contains(&band),
+            "EQ band must be 1–12"
+        );
         Ok(Self {
             key: BAND_KEYS[band - 1] + field as u16,
             field,
@@ -130,6 +127,50 @@ mod tests {
         let width = EqParameter::new(12, EqField::Width)?;
         assert_eq!(width.read_request(), [0x0e, 1]);
         assert!(width.effect_write(33).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn transport_validates_replies_before_returning_values() -> Result<()> {
+        use crate::commands::Command;
+        use crate::device::base::{ExecutableGoXLR, GoXLRCommands, UsbData};
+        use std::collections::VecDeque;
+
+        struct Device(VecDeque<(Command, Vec<u8>, Vec<u8>)>);
+        impl ExecutableGoXLR for Device {
+            fn perform_request(
+                &mut self,
+                command: Command,
+                body: &[u8],
+                retry: bool,
+            ) -> Result<Vec<u8>> {
+                let (expected_command, expected_body, reply) =
+                    self.0.pop_front().expect("Unexpected USB request");
+                assert_eq!(command, expected_command);
+                assert_eq!(body, expected_body);
+                assert!(!retry);
+                Ok(reply)
+            }
+            fn get_descriptor(&self) -> Result<UsbData> {
+                bail!("Unused test descriptor")
+            }
+        }
+        impl GoXLRCommands for Device {}
+        let width = EqParameter::new(12, EqField::Width)?;
+        let mut device = Device(VecDeque::from([
+            (Command::SubmitEqRead, vec![0x0e, 1], vec![0]),
+            (Command::PollEqRead, vec![], vec![1]),
+            (Command::PollEqRead, vec![], vec![0, 0x0e, 1, 16, 0, 0, 0]),
+            (Command::PollEqRead, vec![], vec![0, 0x0d, 1, 16, 0, 0, 0]),
+            (Command::SubmitEqRead, vec![0x0e, 1], vec![0, 0]),
+        ]));
+        device.submit_eq_read(width)?;
+        assert_eq!(device.poll_eq_read(width)?, EqReadback::Pending);
+        assert_eq!(device.poll_eq_read(width)?, EqReadback::Value(16));
+        assert!(device.poll_eq_read(width).is_err());
+        assert!(device.submit_eq_read(width).is_err());
+        assert!(device.set_eq_parameter(width, 33).is_err());
+        assert!(device.0.is_empty());
         Ok(())
     }
 }
