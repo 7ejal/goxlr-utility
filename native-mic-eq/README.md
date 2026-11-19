@@ -63,3 +63,8 @@ original daemon during the extended physical checks. `-ValidationArguments`
 accepts `ReadOnly`, `Bands` and `ContinueAfterAudioFailure`. The helper stops
 before writes when the signal is too quiet or the baseline is unstable, and
 requires all 36 original values after every tested band.
+
+## Headphone and dynamics research
+
+See [the current evidence and blocked integration gates](HEADPHONE-DYNAMICS.md)
+for headphone-only EQ and the offline stock compressor/de-esser control lab.

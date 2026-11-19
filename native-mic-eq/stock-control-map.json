@@ -1,0 +1,669 @@
+{
+  "controls": [
+    {
+      "Key": 10,
+      "Parameter": 2,
+      "Mailbox": 34,
+      "Callback": 4205132,
+      "Command": 12,
+      "Object": 5,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 1,
+      "Default": 1,
+      "Descriptor": [
+        0,
+        0,
+        1,
+        1,
+        10,
+        5375235,
+        262183,
+        74624
+      ],
+      "Dispatch": [
+        12,
+        1283
+      ]
+    },
+    {
+      "Key": 11,
+      "Parameter": 3,
+      "Mailbox": 35,
+      "Callback": 4205132,
+      "Command": 13,
+      "Object": 5,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 100,
+      "Default": 50,
+      "Descriptor": [
+        0,
+        50,
+        100,
+        50,
+        11,
+        6423811,
+        262184,
+        73984
+      ],
+      "Dispatch": [
+        13,
+        1283
+      ]
+    },
+    {
+      "Key": 12,
+      "Parameter": 4,
+      "Mailbox": 36,
+      "Callback": 4205132,
+      "Command": 14,
+      "Object": 5,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 19,
+      "Default": 0,
+      "Descriptor": [
+        0,
+        9,
+        19,
+        0,
+        12,
+        6423811,
+        262185,
+        73984
+      ],
+      "Dispatch": [
+        14,
+        1283
+      ]
+    },
+    {
+      "Key": 13,
+      "Parameter": 5,
+      "Mailbox": 37,
+      "Callback": 4205132,
+      "Command": 15,
+      "Object": 5,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 19,
+      "Default": 9,
+      "Descriptor": [
+        0,
+        9,
+        19,
+        9,
+        13,
+        6423811,
+        262186,
+        73984
+      ],
+      "Dispatch": [
+        15,
+        1283
+      ]
+    },
+    {
+      "Key": 14,
+      "Parameter": 6,
+      "Mailbox": 38,
+      "Callback": 4205132,
+      "Command": 16,
+      "Object": 5,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 2,
+      "Default": 0,
+      "Descriptor": [
+        0,
+        1,
+        2,
+        0,
+        14,
+        6423811,
+        262187,
+        73984
+      ],
+      "Dispatch": [
+        16,
+        1283
+      ]
+    },
+    {
+      "Key": 15,
+      "Parameter": 7,
+      "Mailbox": 39,
+      "Callback": 4205132,
+      "Command": 17,
+      "Object": 5,
+      "Conversion": 6,
+      "Minimum": 0,
+      "Maximum": 100,
+      "Default": 20,
+      "Descriptor": [
+        0,
+        50,
+        100,
+        20,
+        15,
+        6423811,
+        262188,
+        73984
+      ],
+      "Dispatch": [
+        17,
+        1283
+      ]
+    },
+    {
+      "Key": 316,
+      "Parameter": 237,
+      "Mailbox": 159,
+      "Callback": 4205106,
+      "Command": 115,
+      "Object": 17,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 14,
+      "Default": 0,
+      "Descriptor": [
+        0,
+        7,
+        14,
+        0,
+        316,
+        6423846,
+        262333,
+        75008
+      ],
+      "Dispatch": [
+        65651,
+        4366
+      ]
+    },
+    {
+      "Key": 317,
+      "Parameter": 238,
+      "Mailbox": 160,
+      "Callback": 4205106,
+      "Command": 116,
+      "Object": 17,
+      "Conversion": 1023,
+      "Minimum": -50,
+      "Maximum": 0,
+      "Default": 0,
+      "Descriptor": [
+        16777166,
+        16777191,
+        0,
+        0,
+        317,
+        7472422,
+        262334,
+        75008
+      ],
+      "Dispatch": [
+        65652,
+        4366
+      ]
+    },
+    {
+      "Key": 318,
+      "Parameter": 239,
+      "Mailbox": 161,
+      "Callback": 4205106,
+      "Command": 117,
+      "Object": 17,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 19,
+      "Default": 1,
+      "Descriptor": [
+        0,
+        9,
+        19,
+        1,
+        318,
+        6423846,
+        262335,
+        75008
+      ],
+      "Dispatch": [
+        65653,
+        4366
+      ]
+    },
+    {
+      "Key": 319,
+      "Parameter": 240,
+      "Mailbox": 162,
+      "Callback": 4205106,
+      "Command": 118,
+      "Object": 17,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 19,
+      "Default": 9,
+      "Descriptor": [
+        0,
+        9,
+        19,
+        9,
+        319,
+        6423846,
+        262336,
+        75008
+      ],
+      "Dispatch": [
+        65654,
+        4366
+      ]
+    },
+    {
+      "Key": 320,
+      "Parameter": 241,
+      "Mailbox": 163,
+      "Callback": 4205106,
+      "Command": 119,
+      "Object": 17,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 24,
+      "Default": 4,
+      "Descriptor": [
+        0,
+        12,
+        24,
+        4,
+        320,
+        7472422,
+        262337,
+        75008
+      ],
+      "Dispatch": [
+        65655,
+        4366
+      ]
+    },
+    {
+      "Key": 321,
+      "Parameter": 242,
+      "Mailbox": 164,
+      "Callback": 4205106,
+      "Command": 115,
+      "Object": 18,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 14,
+      "Default": 0,
+      "Descriptor": [
+        0,
+        7,
+        14,
+        0,
+        321,
+        6423846,
+        262338,
+        75008
+      ],
+      "Dispatch": [
+        131187,
+        4622
+      ]
+    },
+    {
+      "Key": 322,
+      "Parameter": 243,
+      "Mailbox": 165,
+      "Callback": 4205106,
+      "Command": 116,
+      "Object": 18,
+      "Conversion": 1023,
+      "Minimum": -50,
+      "Maximum": 0,
+      "Default": 0,
+      "Descriptor": [
+        16777166,
+        16777191,
+        0,
+        0,
+        322,
+        7472422,
+        262339,
+        75008
+      ],
+      "Dispatch": [
+        131188,
+        4622
+      ]
+    },
+    {
+      "Key": 323,
+      "Parameter": 244,
+      "Mailbox": 166,
+      "Callback": 4205106,
+      "Command": 117,
+      "Object": 18,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 19,
+      "Default": 1,
+      "Descriptor": [
+        0,
+        9,
+        19,
+        1,
+        323,
+        6423846,
+        262340,
+        75008
+      ],
+      "Dispatch": [
+        131189,
+        4622
+      ]
+    },
+    {
+      "Key": 324,
+      "Parameter": 245,
+      "Mailbox": 167,
+      "Callback": 4205106,
+      "Command": 118,
+      "Object": 18,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 19,
+      "Default": 9,
+      "Descriptor": [
+        0,
+        9,
+        19,
+        9,
+        324,
+        6423846,
+        262341,
+        75008
+      ],
+      "Dispatch": [
+        131190,
+        4622
+      ]
+    },
+    {
+      "Key": 325,
+      "Parameter": 246,
+      "Mailbox": 168,
+      "Callback": 4205106,
+      "Command": 119,
+      "Object": 18,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 24,
+      "Default": 4,
+      "Descriptor": [
+        0,
+        12,
+        24,
+        4,
+        325,
+        7472422,
+        262342,
+        75008
+      ],
+      "Dispatch": [
+        131191,
+        4622
+      ]
+    },
+    {
+      "Key": 346,
+      "Parameter": 232,
+      "Mailbox": 154,
+      "Callback": 4205106,
+      "Command": 115,
+      "Object": 16,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 14,
+      "Default": 14,
+      "Descriptor": [
+        0,
+        7,
+        14,
+        14,
+        346,
+        6423846,
+        262328,
+        75008
+      ],
+      "Dispatch": [
+        115,
+        4110
+      ]
+    },
+    {
+      "Key": 347,
+      "Parameter": 233,
+      "Mailbox": 155,
+      "Callback": 4205106,
+      "Command": 116,
+      "Object": 16,
+      "Conversion": 1023,
+      "Minimum": -50,
+      "Maximum": 0,
+      "Default": 0,
+      "Descriptor": [
+        16777166,
+        16777191,
+        0,
+        0,
+        347,
+        7472422,
+        262329,
+        75008
+      ],
+      "Dispatch": [
+        116,
+        4110
+      ]
+    },
+    {
+      "Key": 348,
+      "Parameter": 234,
+      "Mailbox": 156,
+      "Callback": 4205106,
+      "Command": 117,
+      "Object": 16,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 19,
+      "Default": 6,
+      "Descriptor": [
+        0,
+        9,
+        19,
+        6,
+        348,
+        6423846,
+        262330,
+        75008
+      ],
+      "Dispatch": [
+        117,
+        4110
+      ]
+    },
+    {
+      "Key": 349,
+      "Parameter": 235,
+      "Mailbox": 157,
+      "Callback": 4205106,
+      "Command": 118,
+      "Object": 16,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 19,
+      "Default": 5,
+      "Descriptor": [
+        0,
+        9,
+        19,
+        5,
+        349,
+        6423846,
+        262331,
+        75008
+      ],
+      "Dispatch": [
+        118,
+        4110
+      ]
+    },
+    {
+      "Key": 350,
+      "Parameter": 236,
+      "Mailbox": 158,
+      "Callback": 4205106,
+      "Command": 119,
+      "Object": 16,
+      "Conversion": 1023,
+      "Minimum": 0,
+      "Maximum": 24,
+      "Default": 0,
+      "Descriptor": [
+        0,
+        12,
+        24,
+        0,
+        350,
+        7472422,
+        262332,
+        75008
+      ],
+      "Dispatch": [
+        119,
+        4110
+      ]
+    }
+  ],
+  "deesser_mode_words": [
+    8380219,
+    8387769,
+    8388524
+  ],
+  "deesser_scalar_conversion_pairs": [
+    [
+      0,
+      0
+    ],
+    [
+      100,
+      4096
+    ]
+  ],
+  "image_sha256": "5ff0d41144b47672c1486d7e7182ae260f7a36e6044860ddfd0f1afceb1436db",
+  "limits": [
+    "Static serialized-image evidence; no live timing, memory or physical PCM ownership measurement.",
+    "ROM ranges are not permission to expand UI ranges. Existing 908 bridge accepts mic EQ keys only.",
+    "Object indices select X:419E2C pointer slots, not physical inputs/outputs. No new feature is enabled."
+  ],
+  "logical_mix_routes": [
+    {
+      "destination_block": 1,
+      "destination_channel": 2,
+      "index": 18,
+      "mix_channel": 0
+    },
+    {
+      "destination_block": 1,
+      "destination_channel": 3,
+      "index": 19,
+      "mix_channel": 1
+    },
+    {
+      "destination_block": 12,
+      "destination_channel": 0,
+      "index": 20,
+      "mix_channel": 2
+    },
+    {
+      "destination_block": 12,
+      "destination_channel": 1,
+      "index": 21,
+      "mix_channel": 3
+    },
+    {
+      "destination_block": 12,
+      "destination_channel": 2,
+      "index": 22,
+      "mix_channel": 4
+    },
+    {
+      "destination_block": 12,
+      "destination_channel": 3,
+      "index": 23,
+      "mix_channel": 5
+    },
+    {
+      "destination_block": 12,
+      "destination_channel": 4,
+      "index": 24,
+      "mix_channel": 6
+    },
+    {
+      "destination_block": 12,
+      "destination_channel": 5,
+      "index": 25,
+      "mix_channel": 7
+    },
+    {
+      "destination_block": 1,
+      "destination_channel": 0,
+      "index": 26,
+      "mix_channel": 8
+    },
+    {
+      "destination_block": 1,
+      "destination_channel": 1,
+      "index": 27,
+      "mix_channel": 9
+    },
+    {
+      "destination_block": 12,
+      "destination_channel": 23,
+      "index": 28,
+      "mix_channel": 10
+    },
+    {
+      "destination_block": 12,
+      "destination_channel": 24,
+      "index": 29,
+      "mix_channel": 11
+    },
+    {
+      "destination_block": 1,
+      "destination_channel": 4,
+      "index": 30,
+      "mix_channel": 12
+    },
+    {
+      "destination_block": 1,
+      "destination_channel": 5,
+      "index": 31,
+      "mix_channel": 13
+    },
+    {
+      "destination_block": 1,
+      "destination_channel": 6,
+      "index": 32,
+      "mix_channel": 13
+    },
+    {
+      "destination_block": 1,
+      "destination_channel": 7,
+      "index": 33,
+      "mix_channel": 13
+    }
+  ]
+}

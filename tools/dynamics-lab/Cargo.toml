@@ -1,0 +1,15 @@
+[package]
+name = "goxlr-dynamics-lab"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+dsp56300-core = { git = "https://github.com/xemu-project/dsp56300", rev = "a948103b44e21dd1296623a92f812bdf782e6cd4" }
+dsp56300-emu = { git = "https://github.com/xemu-project/dsp56300", rev = "a948103b44e21dd1296623a92f812bdf782e6cd4", default-features = false }
+
+[[bin]]
+name = "goxlr-dynamics-lab"
+path = "../trace_goxlr_dynamics.rs"
