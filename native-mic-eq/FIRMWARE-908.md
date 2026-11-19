@@ -75,8 +75,20 @@ The installed-state comparison also caught a migration defect: legacy width
 metadata that had previously been profile-only was replayed at startup. The
 original live widths were restored. Replay now uses only explicit native
 overrides, with a regression test covering legacy widths and a native edit's
-save/load behavior. Final installed-state verification follows administrator
-approval for the corrected build.
+save/load behavior. The corrected build was subsequently installed and started
+in the normal Windows user session. Its real native IPC read/write and profile
+reload checks passed again. The final comparison found zero differences in
+all 36 DSP fields, and both saved profile hashes matched their original
+backups. Windows accessibility also exposed all twelve live band rows and the
+frequency, gain and raw-width controls in the installed native app.
+
+Installed executable SHA-256 values:
+
+- Daemon: `EF749D8E82CE2FFA15D0273BC624FE13A931D83A56FA001F94AE19F7DADAB3C0`
+- Native app: `C599D0993A7874592FDE3571F0120774AA7EB35A2BA0CEB063D846650C0BCEAD`
+
+Original executables remain backed up. The existing native-app shortcut opens
+the updated application; no additional preview application was created.
 
 This is one physical device and one microphone fixture. Worst-case live heap
 use, IRQ-off latency, native-tick duration, deliberately induced physical
