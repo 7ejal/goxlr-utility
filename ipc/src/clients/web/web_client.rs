@@ -44,6 +44,7 @@ impl Client for WebClient {
                 bail!("Received Mic Level as response, shouldn't happen!")
             }
             DaemonResponse::MicEqParameter(_) => bail!("Unexpected DSP EQ readback response"),
+            DaemonResponse::DynamicsParameter(_) => bail!("Unexpected DSP dynamics response"),
             DaemonResponse::RecoveryPartition(_) => bail!("Unexpected recovery partition response"),
             DaemonResponse::Patch(_patch) => {
                 bail!("Received Patch as response, shouldn't happen!")

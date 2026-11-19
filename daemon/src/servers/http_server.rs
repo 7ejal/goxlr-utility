@@ -206,6 +206,12 @@ async fn websocket(
                                                         data: DaemonResponse::MicEqParameter(raw),
                                                     })
                                                 }
+                                                DaemonResponse::DynamicsParameter(raw) => {
+                                                    WsResponse(WebsocketResponse {
+                                                        id: request_id,
+                                                        data: DaemonResponse::DynamicsParameter(raw),
+                                                    })
+                                                }
                                                 DaemonResponse::RecoveryPartition(data) => {
                                                     WsResponse(WebsocketResponse {
                                                         id: request_id,

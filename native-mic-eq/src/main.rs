@@ -20,6 +20,7 @@ struct App {
     gain: i8,
     width: u8,
     band: usize,
+    dynamics: [i32; 11],
 }
 
 impl App {
@@ -52,6 +53,7 @@ impl App {
             self.frequency = band.hz;
             self.gain = band.gain;
             self.width = band.raw.unwrap_or(16);
+            self.dynamics = device.dynamics.unwrap_or([0; 11]);
         }
     }
 }
@@ -86,6 +88,7 @@ impl eframe::App for App {
             }
         }
         egui::CentralPanel::default().show(ctx, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
             ui.heading("GoXLR Microphone EQ");
             ui.horizontal(|ui| {
                 if ui
@@ -127,7 +130,47 @@ impl eframe::App for App {
                 "Firmware {}  |  Mic profile {}",
                 device.firmware, device.key.name
             ));
-            let readback = device.firmware == daemon::READBACK_FIRMWARE;
+            let readback = daemon::has_readback(&device.firmware);
+            let mut dynamics_edit = None;
+            ui.collapsing("Compressor and de-esser", |ui| {
+                if let Some(values) = device.dynamics {
+                    ui.label("Live settings only; these changes are not saved to a profile.");
+                    if !daemon::DYNAMICS_CONTROLS_VERIFIED {
+                        ui.label("Controls are awaiting physical validation.");
+                    }
+                    let labels = ["De-esser enabled", "De-esser amount (%)", "De-esser attack",
+                        "De-esser release", "Gain smoothing", "Detector weighting (%)",
+                        "Compressor ratio", "Compressor threshold (dB)",
+                        "Compressor attack", "Compressor release", "Compressor makeup (dB)"];
+                    for (index, control) in goxlr_types::DynamicsControl::ALL.into_iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.label(labels[index]);
+                            ui.add_enabled(daemon::DYNAMICS_CONTROLS_VERIFIED && self.pending.is_none(),
+                                egui::DragValue::new(&mut self.dynamics[index]).range(control.range()));
+                            use goxlr_types::DynamicsControl::*;
+                            let raw = self.dynamics[index] as usize;
+                            let attack = [1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,12.,14.,16.,18.,20.,23.,26.,30.,35.,40.];
+                            let release = [15,15,25,35,45,55,65,75,85,100,115,140,170,230,340,680,1000,1500,2000,3000];
+                            let units = match control {
+                                DeesserAttack => format!("{} ms (99%)", attack[raw]),
+                                DeesserRelease => format!("{} ms (99%)", release[raw]),
+                                CompressorAttack => format!("{} ms", if raw == 0 {0.001} else {attack[raw]}),
+                                CompressorRelease => format!("{} ms", release[raw]),
+                                CompressorRatio => format!("{}:1", [1.,1.1,1.2,1.4,1.6,1.8,2.,2.5,3.2,4.,5.6,8.,16.,32.,64.][raw]),
+                                DeesserMode => format!("~{} ms at 48 kHz", [20.82,208.29,2080.50][raw]),
+                                _ => String::new(),
+                            };
+                            ui.label(units);
+                            if ui.add_enabled(daemon::DYNAMICS_CONTROLS_VERIFIED && self.pending.is_none()
+                                && self.dynamics[index] != values[index], egui::Button::new("Apply")).clicked() {
+                                dynamics_edit = Some((index, self.dynamics[index]));
+                            }
+                        });
+                    }
+                } else {
+                    ui.label("Advanced dynamics are awaiting device validation.");
+                }
+            });
             ui.label(if readback {
                 "All 12 bands show DSP readback. Q / width uses raw 0–32; numerical Q is not calibrated."
             } else {
@@ -240,7 +283,10 @@ impl eframe::App for App {
                         });
                     }
                 });
-                if let Some(edit) = edit {
+                if let Some((index, raw)) = dynamics_edit {
+                    let baseline = device.clone();
+                    self.request(ctx, move || async move { daemon::apply_dynamics(baseline, index, raw).await });
+                } else if let Some(edit) = edit {
                     let serial = device.key.serial.clone();
                     let baseline = device.clone();
                     let index = self.band;
@@ -255,6 +301,7 @@ impl eframe::App for App {
                     });
                 }
             }
+            });
         });
     }
 }
@@ -279,6 +326,7 @@ fn main() -> eframe::Result {
                 gain: 0,
                 width: 16,
                 band: 5,
+                dynamics: [0; 11],
             };
             app.refresh(&cc.egui_ctx);
             Ok(Box::new(app))

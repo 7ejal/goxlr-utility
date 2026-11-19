@@ -61,6 +61,17 @@ pub async fn handle_packet(
             Ok(DaemonResponse::Ok)
         }
 
+        DaemonRequest::ReadDynamicsParameter(serial, control) => {
+            let (tx, rx) = oneshot::channel();
+            usb_tx
+                .send(DeviceCommand::ReadDynamicsParameter(serial, control, tx))
+                .await
+                .map_err(|e| anyhow!(e.to_string()))
+                .context("Could not communicate with the GoXLR device")?;
+            Ok(DaemonResponse::DynamicsParameter(
+                rx.await.context("Could not read DSP dynamics")??,
+            ))
+        }
         DaemonRequest::ReadMicEqParameter(serial, band, field) => {
             let (tx, rx) = oneshot::channel();
             usb_tx

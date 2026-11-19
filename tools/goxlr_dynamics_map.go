@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 )
 
@@ -34,7 +35,8 @@ func inspect(path string) error {
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256(b))
 	if hash != "5ff0d41144b47672c1486d7e7182ae260f7a36e6044860ddfd0f1afceb1436db" &&
-		hash != "c8607989063552e5a412ad3b29b4e1db355d9b737dcc59d972a5349fbfaa970f" {
+		hash != "c8607989063552e5a412ad3b29b4e1db355d9b737dcc59d972a5349fbfaa970f" &&
+		hash != "74555b3667dcb7150930ae544bdfcf732febf7bb6a0aa9b7cfd9b513ffa3c74b" {
 		return fmt.Errorf("unrecognized image SHA256: %s", hash)
 	}
 	word := func(offset int) uint32 { return uint32(b[offset])<<16 | uint32(b[offset+1])<<8 | uint32(b[offset+2]) }
@@ -75,8 +77,10 @@ func inspect(path string) error {
 			x[d.destination+i] = v
 		}
 	}
-	// Check the native dispatcher calls and tables directly against serialized opcodes.
+	// Check the native dispatcher calls, object registration and tables against serialized opcodes.
 	anchors := map[uint32][]uint32{
+		0x400405: {0x0a70d2, 0x00001e}, 0x400426: {0x0a70d2, 0x00000d},
+		0x400429: {0x0a70d2, 0x00001c}, 0x40042d: {0x0a70d3, 0x000021},
 		0x402a33: {0x0bf080, 0x0344d1}, 0x402a4e: {0x0bf080, 0x0334a3},
 		0x0344de: {0x0344e3, 0x0344ed, 0x0344ff, 0x034509, 0x034519},
 		0x0334af: {0x0334b5, 0x0334b9, 0x0334cc, 0x0334d6, 0x0334e6, 0x0334ef},
@@ -142,7 +146,23 @@ func inspect(path string) error {
 	for i := uint32(0); i < count; i++ {
 		conversion = append(conversion, [2]int32{signed(x[address+i]), signed(x[address+count+i])})
 	}
+	tables := map[string][]float64{}
+	for _, table := range []struct {
+		name           string
+		address, count uint32
+	}{
+		{"deesser_attack_seconds", 0x41b970, 20}, {"deesser_release_seconds", 0x41b998, 20},
+		{"compressor_ratios", 0x41bd70, 15}, {"compressor_attack_seconds", 0x41bd8e, 20},
+		{"compressor_release_seconds", 0x41bdb6, 20},
+	} {
+		for i := uint32(0); i < table.count; i++ {
+			exponent, mantissa := x[table.address+2*i], x[table.address+2*i+1]
+			tables[table.name] = append(tables[table.name], math.Ldexp(float64(signed(mantissa))/8388608, int(signed(exponent))-127))
+		}
+	}
 	return enc.Encode(map[string]any{"image_sha256": hash, "controls": controls, "logical_mix_routes": routes,
+		"global_slot_to_root_child":       map[string]int{"5": 30, "16": 13, "17": 28, "18": 33},
+		"decoded_native_tables":           tables,
 		"deesser_mode_words":              []uint32{x[0x41b9c0], x[0x41b9c1], x[0x41b9c2]},
 		"deesser_scalar_conversion_pairs": conversion,
 		"limits":                          []string{"Static serialized-image evidence; no live timing, memory or physical PCM ownership measurement.", "ROM ranges are not permission to expand UI ranges. Existing 908 bridge accepts mic EQ keys only.", "Object indices select X:419E2C pointer slots, not physical inputs/outputs. No new feature is enabled."}})

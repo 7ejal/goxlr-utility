@@ -1,0 +1,21 @@
+{
+  "build": 909,
+  "revision": "dynamics-readback-whitelist-r1",
+  "stage": "serialized experimental image; offline ARM/Boot2/allowlist tests passed; physical validation pending",
+  "sha256": "74555b3667dcb7150930ae544bdfcf732febf7bb6a0aa9b7cfd9b513ffa3c74b",
+  "arm_crc": "D7F16D2B",
+  "outer_crc": "791AE153",
+  "bridge_load_bytes": 992,
+  "bridge_state_bytes": 24,
+  "reset_helper_start": "0x4F400",
+  "windows_daemon_sha256": "C6CF3C806DEEFB86A2C20777119B8AB742EC88F4489AC463EAD3B8DE3D6748ED",
+  "windows_native_app_sha256": "1658C3326835FD3A5A49F07E434631D7CD43B1018E021897F6652B1F8F5E609C",
+  "baseline_build": 908,
+  "baseline_sha256": "c8607989063552e5a412ad3b29b4e1db355d9b737dcc59d972a5349fbfaa970f",
+  "construction_baseline_build": 907,
+  "construction_baseline_sha256": "eea92925a5d4eb0111943f72ce7bfeb0351e9390506feca17ac6a0c3b8346c13",
+  "change": "Reuse the 908 bridge, add read permission for stock de-esser 0x0A..0x0F and microphone compressor 0x13C..0x140; retain EQ whitelist and all existing transport/state behavior",
+  "expected_size": 640044,
+  "preserve": ["908 image", "installed daemon/app", "microphone profiles", "DSP records", "Boot2", "Golden"],
+  "flash_authorized": false
+}

@@ -3,6 +3,7 @@
 param(
     [string]$Playback = 'Game (TC-HELICON GoXLR)',
     [string]$Capture = 'Chat Mic (TC-HELICON GoXLR)',
+    [ValidateSet(1,2)][int]$CaptureChannels = 1,
     [double]$ToneAmplitude = 0.04,
     [string]$Client,
     [switch]$LibraryOnly,
@@ -32,7 +33,8 @@ public static class MicFixture {
     static double[] tones = {700, 1000, 1500, 2300};
     public static void SetTones(double[] frequencies) { tones = frequencies; }
     static void Check(uint result) { if (result != 0) throw new Exception("waveOut error " + result); }
-    public static IDisposable Start(string endpoint, double amplitude) {
+    public static IDisposable Start(string endpoint, double amplitude) { return Start(endpoint, amplitude, false); }
+    public static IDisposable Start(string endpoint, double amplitude, bool splitStereo) {
         uint id = uint.MaxValue;
         for (uint i = 0; i < waveOutGetNumDevs(); i++) {
             var caps = new byte[84];
@@ -43,19 +45,24 @@ public static class MicFixture {
             id = i;
         }
         if (id == uint.MaxValue) throw new Exception("Playback device unavailable: " + endpoint);
-        return new Tone(id, amplitude);
+        return new Tone(id, amplitude, splitStereo);
     }
     sealed class Tone : IDisposable {
         IntPtr handle, header;
         GCHandle pin;
         bool prepared;
         readonly uint size = (uint)Marshal.SizeOf(typeof(Header));
-        public Tone(uint id, double amplitude) {
+        public Tone(uint id, double amplitude, bool splitStereo) {
+            if (splitStereo && tones.Length != 2) throw new Exception("Stereo test needs two tones");
             var samples = new short[48000 * 2 * 2];
             for (int i = 0; i < samples.Length / 2; i++) {
                 double sum = 0;
                 foreach (double hz in tones) sum += Math.Sin(2 * Math.PI * hz * i / 48000);
                 samples[2*i] = samples[2*i+1] = (short)(32767 * amplitude * sum);
+                if (splitStereo) {
+                    samples[2*i] = (short)(32767 * amplitude * Math.Sin(2*Math.PI*tones[0]*i/48000));
+                    samples[2*i+1] = (short)(32767 * amplitude * Math.Sin(2*Math.PI*tones[1]*i/48000));
+                }
             }
             var format = new Format { tag=1, channels=2, rate=48000, bytes=192000, block=4, bits=16 };
             Check(waveOutOpen(out handle, id, ref format, IntPtr.Zero, IntPtr.Zero, 0));
@@ -76,15 +83,16 @@ public static class MicFixture {
             waveOutClose(handle);
         }
     }
-    public static double[] Levels(byte[] pcm, int count) {
+    public static double[] Levels(byte[] pcm, int count) { return Levels(pcm, count, 1, 0); }
+    public static double[] Levels(byte[] pcm, int count, int channels, int channel) {
         const int start=24000;
-        if (pcm.Length < (start+count)*4) throw new Exception("Capture too short");
+        if (channel < 0 || channel >= channels || pcm.Length < (start+count)*4*channels) throw new Exception("Capture too short or invalid channel");
         var levels = new double[tones.Length];
         for (int j = 0; j < tones.Length; j++) {
             double omega=2*Math.PI*tones[j]/48000;
             double x=0, y=0;
             for (int i=0; i<count; i++) {
-                var value=BitConverter.ToSingle(pcm, (start+i)*4);
+                var value=BitConverter.ToSingle(pcm, ((start+i)*channels+channel)*4);
                 x += value*Math.Cos(i*omega);
                 y += value*Math.Sin(i*omega);
             }
@@ -95,13 +103,13 @@ public static class MicFixture {
 }
 "@
 
-function Measure-Tones {
+function Measure-Tones([int]$Channel = 0) {
     $path = [IO.Path]::GetTempFileName()
     try {
         $captureProcess = [Diagnostics.ProcessStartInfo]::new($ffmpeg)
         $captureProcess.UseShellExecute = $false
         $captureProcess.CreateNoWindow = $true
-        foreach ($part in @('-nostdin','-v','error','-y','-f','dshow','-i',"audio=$Capture",'-t',$captureDuration,'-ac','1','-ar','48000','-f','f32le',$path)) {
+        foreach ($part in @('-nostdin','-v','error','-y','-f','dshow','-i',"audio=$Capture",'-t',$captureDuration,'-ac',"$CaptureChannels",'-ar','48000','-f','f32le',$path)) {
             $captureProcess.ArgumentList.Add($part)
         }
         $process = [Diagnostics.Process]::Start($captureProcess)
@@ -115,7 +123,7 @@ function Measure-Tones {
         } finally {
             $process.Dispose()
         }
-        [MicFixture]::Levels([IO.File]::ReadAllBytes($path), $sampleCount)
+        [MicFixture]::Levels([IO.File]::ReadAllBytes($path), $sampleCount, $CaptureChannels, $Channel)
     } finally {
         Remove-Item -LiteralPath $path
     }

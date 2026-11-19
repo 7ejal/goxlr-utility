@@ -25,6 +25,10 @@ typedef struct {
 
 static bool is_eq_key(uint16_t key)
 {
+#ifdef GOXLR_DYNAMICS_BRIDGE
+    if ((key >= 0x0a && key <= 0x0f) || (key >= 0x13c && key <= 0x140))
+        return true;
+#endif
     static const uint16_t starts[] = {
         0x126, 0xf8, 0x113, 0x129, 0x116, 0x11d, 0x12c, 0x120,
         0x109, 0x12f, 0xf5, 0x10c
@@ -266,6 +270,19 @@ int main(void)
     EqReadback state = {0};
     uint8_t frame[10];
     int32_t value;
+#ifdef GOXLR_DYNAMICS_BRIDGE
+    for (uint16_t key = 0; key < 0x168; ++key) {
+        if ((key >= 0x0a && key <= 0x0f) || (key >= 0x13c && key <= 0x140)) {
+            EqReadback dynamics = {0};
+            assert(goxlr_eq_query(&dynamics, key, 0, 10, frame));
+            assert(frame[7] == key >> 7 && frame[8] == (key & 0x7f));
+        }
+    }
+    assert(!is_eq_key(0x09) && !is_eq_key(0x10));
+    assert(!is_eq_key(0x13b) && !is_eq_key(0x141));
+#else
+    assert(!is_eq_key(0x0a) && !is_eq_key(0x13c));
+#endif
     assert(!goxlr_eq_query(&state, 0x10f, 0, 10, frame));
     assert(goxlr_eq_query(&state, 0xf6, UINT32_MAX - 2, 10, frame));
     assert(frame[6] == 0x47 && frame[7] == 1 && frame[8] == 0x76 && frame[9] == 0xf7);

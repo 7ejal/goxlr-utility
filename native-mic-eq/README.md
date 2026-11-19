@@ -68,3 +68,7 @@ requires all 36 original values after every tested band.
 
 See [the current evidence and blocked integration gates](HEADPHONE-DYNAMICS.md)
 for headphone-only EQ and the offline stock compressor/de-esser control lab.
+
+The [prepared 909 dynamics bridge](FIRMWARE-909.md) extends the existing native
+app and transport. Hardware dynamics validation is pending; the installed 908
+setup remains unchanged and new dynamics writes stay disabled in the GUI.

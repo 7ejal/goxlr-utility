@@ -15,7 +15,8 @@ pub use goxlr_types::MicEqField as EqField;
 #[derive(Clone, Copy, Debug)]
 pub struct EqParameter {
     key: u16,
-    field: EqField,
+    minimum: i32,
+    maximum: i32,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -33,10 +34,25 @@ impl EqParameter {
             (1..=BAND_KEYS.len()).contains(&band),
             "EQ band must be 1–12"
         );
+        let (minimum, maximum) = match field {
+            EqField::Frequency => (0, 240),
+            EqField::Gain => (-12, 12),
+            EqField::Width => (0, 32),
+        };
         Ok(Self {
             key: BAND_KEYS[band - 1] + field as u16,
-            field,
+            minimum,
+            maximum,
         })
+    }
+
+    pub fn dynamics(control: goxlr_types::DynamicsControl) -> Self {
+        let range = control.range();
+        Self {
+            key: control.key(),
+            minimum: *range.start(),
+            maximum: *range.end(),
+        }
     }
 
     pub fn read_request(self) -> [u8; 2] {
@@ -44,7 +60,7 @@ impl EqParameter {
     }
 
     pub fn effect_write(self, value: i32) -> Result<[u8; 8]> {
-        self.validate(value, 12)?;
+        self.validate(value)?;
         let mut record = [0; 8];
         record[..4].copy_from_slice(&u32::from(self.key).to_le_bytes());
         record[4..].copy_from_slice(&value.to_le_bytes());
@@ -59,7 +75,7 @@ impl EqParameter {
                     "EQ reply key does not match request"
                 );
                 let raw = i32::from_le_bytes([*a, *b, *c, *d]);
-                self.validate(raw, 12)?;
+                self.validate(raw)?;
                 Ok(EqReadback::Value(raw))
             }
             [1] => Ok(EqReadback::Pending),
@@ -71,13 +87,11 @@ impl EqParameter {
         }
     }
 
-    fn validate(self, value: i32, gain_limit: i32) -> Result<()> {
-        let range = match self.field {
-            EqField::Frequency => 0..=240,
-            EqField::Gain => -gain_limit..=gain_limit,
-            EqField::Width => 0..=32,
-        };
-        ensure!(range.contains(&value), "Raw EQ value is out of range");
+    fn validate(self, value: i32) -> Result<()> {
+        ensure!(
+            (self.minimum..=self.maximum).contains(&value),
+            "Raw DSP value is out of range"
+        );
         Ok(())
     }
 }
@@ -86,6 +100,26 @@ impl EqParameter {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn dynamics_packets_validate_keys_and_rom_bounds() -> Result<()> {
+        for control in goxlr_types::DynamicsControl::ALL {
+            let parameter = EqParameter::dynamics(control);
+            assert_eq!(parameter.read_request(), control.key().to_le_bytes());
+            let range = control.range();
+            for value in [*range.start(), *range.end()] {
+                let packet = parameter.effect_write(value)?;
+                assert_eq!(&packet[4..], &value.to_le_bytes());
+                let mut reply = vec![0];
+                reply.extend_from_slice(&parameter.read_request());
+                reply.extend_from_slice(&value.to_le_bytes());
+                assert_eq!(parameter.poll_reply(&reply)?, EqReadback::Value(value));
+            }
+            assert!(parameter.effect_write(range.start() - 1).is_err());
+            assert!(parameter.effect_write(range.end() + 1).is_err());
+        }
+        Ok(())
+    }
 
     #[test]
     fn covers_all_36_keys() -> Result<()> {

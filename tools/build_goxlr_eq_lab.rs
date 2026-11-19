@@ -23,11 +23,17 @@ fn crc(mut state: u32, bytes: &[u8]) -> u32 {
     state
 }
 
-fn same_size_image(original: &[u8], bridge: &[u8], stage: &[u8], firmware: bool) -> Vec<u8> {
+fn same_size_image(
+    original: &[u8],
+    bridge: &[u8],
+    stage: &[u8],
+    firmware: bool,
+    build: u32,
+) -> Vec<u8> {
     const BRIDGE: usize = 0x394d0;
     const STAGE: usize = 0x39d8c;
     const ENTRY: usize = 0x244 - 0x1ac;
-    assert!(!bridge.is_empty() && bridge.len() <= 1060 && bridge.len() % 4 == 0);
+    assert!(!bridge.is_empty() && bridge.len() <= 1000 && bridge.len() % 4 == 0);
     assert!(!stage.is_empty() && stage.len() <= 864 && stage.len() % 4 == 0);
     assert_eq!(word(stage, 0), 0xe92d503f);
     assert!(
@@ -46,7 +52,7 @@ fn same_size_image(original: &[u8], bridge: &[u8], stage: &[u8], firmware: bool)
     image[STAGE..STAGE + stage.len()].copy_from_slice(stage);
     put(&mut image, ENTRY, 0xea000000 | ((0x39f38 - 0x244 - 8) / 4));
     for offset in [0x1c, 0x2c, 0x3a2be] {
-        put(&mut image, offset, 908);
+        put(&mut image, offset, build);
     }
     if !firmware {
         image[..16].copy_from_slice(b"GXLAB_NOT_FLASH!");
@@ -65,12 +71,26 @@ fn same_size_image(original: &[u8], bridge: &[u8], stage: &[u8], firmware: bool)
     assert_eq!(reversed, original);
     assert_eq!(word(&image, 0x28), word(original, 0x28));
     assert_eq!(image.len(), original.len());
-    println!("Same-size experimental 908, ARM CRC {arm_crc:08X}, outer CRC {outer_crc:08X}");
+    println!("Same-size experimental {build}, ARM CRC {arm_crc:08X}, outer CRC {outer_crc:08X}");
     image
 }
 
 fn main() -> io::Result<()> {
-    let args: Vec<_> = env::args_os().skip(1).map(PathBuf::from).collect();
+    let mut raw: Vec<_> = env::args_os().skip(1).collect();
+    let build = if raw.first().is_some_and(|arg| arg == "--build") {
+        assert!(raw.len() >= 2, "Pass a reserved build number");
+        let build = raw[1].to_str().unwrap().parse::<u32>().unwrap();
+        assert!([908, 909].contains(&build), "Build number is not reserved");
+        raw.drain(..2);
+        build
+    } else {
+        908
+    };
+    let args: Vec<_> = raw.into_iter().map(PathBuf::from).collect();
+    assert!(
+        build == 908 || args.len() == 4,
+        "909 requires the same-size bridge form"
+    );
     if ![3, 4].contains(&args.len())
         || args
             .last()
@@ -101,6 +121,7 @@ fn main() -> io::Result<()> {
             &stage,
             &fs::read(&args[2])?,
             args[3].extension().is_some_and(|ext| ext == "bin"),
+            build,
         );
         return fs::OpenOptions::new()
             .write(true)

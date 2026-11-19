@@ -56,7 +56,7 @@ fn main() {
     assert_eq!(image.len(), 640044);
     assert_eq!(&image[0x3a2b0..0x3a2ba], b"TCHDSP_V2:");
     let build = u32::from_le_bytes(image[0x1c..0x20].try_into().unwrap());
-    assert!([901, 908].contains(&build));
+    assert!([901, 908, 909].contains(&build));
     let mut p = vec![0; 0x420000];
     let mut x = vec![0; 0x1000000];
     let mut y = vec![0; 0x1000000];
@@ -252,7 +252,107 @@ fn main() {
         );
     }
     assert_eq!(cases, 105);
+    // Recover the time criterion from the actual coefficient setter, not UI labels.
+    let attack_ms = [
+        1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 12., 14., 16., 18., 20., 23., 26., 30., 35., 40.,
+    ];
+    let release_ms = [
+        15., 15., 25., 35., 45., 55., 65., 75., 85., 100., 115., 140., 170., 230., 340., 680.,
+        1000., 1500., 2000., 3000.,
+    ];
+    for (slot, object, coefficient, times, log_target) in [
+        (0x24, 0x3200, 6, attack_ms, 0.01_f64.ln()),
+        (0x25, 0x3200, 7, release_ms, 0.01_f64.ln()),
+        (
+            0xa1,
+            0x3800,
+            7,
+            [
+                0.001, 2., 3., 4., 5., 6., 7., 8., 9., 10., 12., 14., 16., 18., 20., 23., 26., 30.,
+                35., 40.,
+            ],
+            -1.,
+        ),
+        (0xa2, 0x3800, 8, release_ms, -1.),
+    ] {
+        let mut maximum_error = 0_f64;
+        for (raw, milliseconds) in times.into_iter().enumerate() {
+            state.registers[reg::A1] = slot;
+            state.registers[reg::B1] = raw as u32;
+            execute(&mut state, &mut jit, 0x402aa2);
+            let actual =
+                state.read_memory(MemSpace::Y, object + 0x100 + coefficient) as f64 / 8388608.;
+            let pole = (log_target / (48000. * milliseconds / 1000.)).exp();
+            let expected = if object == 0x3200 { pole } else { 1. - pole };
+            maximum_error = maximum_error.max((actual - expected).abs());
+            assert!(
+                (actual - expected).abs() < 0.00001,
+                "slot {slot:X} raw {raw}, actual {actual}, expected {expected}"
+            );
+        }
+        println!("PASS 20 native timing coefficients slot {slot:02X}, max error {maximum_error}");
+    }
+    for raw in 0..=100 {
+        let before: Vec<_> = (0..14)
+            .map(|i| state.read_memory(MemSpace::Y, 0x3300 + i))
+            .collect();
+        let pieces = [21, 14, 7, 0].map(|shift| (raw >> shift) & 127);
+        sysex(
+            &mut state,
+            &mut jit,
+            0x35,
+            &[0, 0x0f, pieces[0], pieces[1], pieces[2], pieces[3]],
+        );
+        state.registers[reg::A1] = 0x27;
+        state.registers[reg::B1] = state.read_memory(MemSpace::X, VALUES + 0x27);
+        execute(&mut state, &mut jit, 0x402aa2);
+        for (i, old) in before.into_iter().enumerate() {
+            let actual = state.read_memory(MemSpace::Y, 0x3300 + i as u32);
+            if i == 13 {
+                assert!((actual as f64 / 8388608. - raw as f64 / 100.).abs() < 0.00025);
+            } else {
+                assert_eq!(actual, old, "Detector weight changed another coefficient");
+            }
+        }
+    }
+    println!("PASS 101 detector weights: normalized 0..1, only Y:core+13 changes");
+    for raw in [0, 6, 12, 24] {
+        state.registers[reg::A1] = 0xa3;
+        state.registers[reg::B1] = raw;
+        execute(&mut state, &mut jit, 0x402aa2);
+        let word = state.read_memory(MemSpace::Y, 0x3902);
+        let value = ((word << 8) as i32 >> 8) as f64 / 8388608.;
+        let offset = 0x780a3e as f64 / 8388608. * 32.;
+        let scale = 0x550a96 as f64 / 8388608. / 256.;
+        assert!((value - (raw as f64 - offset) * scale).abs() < 0.000001);
+        println!("PASS compressor makeup {raw} dB -> signed log-domain coefficient {value}");
+    }
+    let children = [
+        0, 38, 39, 25, 68, 30, 32, 35, 26, 21, 22, 23, 24, 36, 57, 27, 13, 28, 33,
+    ];
+    for child in 0..=68 {
+        state.write_memory(MemSpace::X, 0x7000 + child, 0x8000 + child * 64);
+    }
+    state.write_memory(MemSpace::X, 0x8000 + 68 * 64 + 48, 0xa000);
+    state.registers[reg::R0] = 0x7000;
+    execute(&mut state, &mut jit, 0x4003f4);
+    for (slot, child) in children.into_iter().enumerate() {
+        let expected = if slot == 0 {
+            0x7000
+        } else if slot == 4 {
+            0xa000
+        } else {
+            0x8000 + child * 64
+        };
+        assert_eq!(
+            state.read_memory(MemSpace::X, 0x419e2c + slot as u32),
+            expected
+        );
+    }
     println!(
-        "PASS {cases} serialized DSP dynamics cases; no physical DSP load or acoustic result claimed"
+        "PASS original object registration: de-esser root+30; compressor families root+13/+28/+33"
+    );
+    println!(
+        "PASS {cases} serialized control cases, 185 coefficient cases and object registration; no live DSP load or acoustic result claimed"
     );
 }

@@ -5,6 +5,7 @@ param(
     [switch]$ReadOnly,
     [string]$NativeTestRunner,
     [switch]$NativeWriteRoundTrip,
+    [switch]$DynamicsRoundTrip,
     [switch]$ProfileRoundTrip,
     [ValidateRange(0.001,0.08)][double]$ToneAmplitude = 0.06,
     [switch]$ContinueAfterAudioFailure,
@@ -21,8 +22,11 @@ function Send-Request($body) {
 $status = (Send-Request 'GetStatus').Status
 $devices = @($status.mixers.PSObject.Properties)
 if ($devices.Count -ne 1 -or $devices[0].Value.hardware.device_type -ne 'Full' -or
-    ($devices[0].Value.hardware.versions.firmware -join '.') -ne '1.5.1.908') {
-    throw 'Exactly one full-size GoXLR on experimental 908 is required.'
+    ($devices[0].Value.hardware.versions.firmware -join '.') -notin @('1.5.1.908','1.5.1.909')) {
+    throw 'Exactly one full-size GoXLR on experimental 908 or 909 is required.'
+}
+if ($DynamicsRoundTrip -and (!$NativeTestRunner -or ($devices[0].Value.hardware.versions.firmware -join '.') -ne '1.5.1.909')) {
+    throw 'Dynamics validation requires 909 and the explicitly supplied native test runner.'
 }
 $device = $devices[0].Name
 $profileName = $devices[0].Value.mic_profile_name
@@ -48,6 +52,10 @@ if ($NativeTestRunner) {
     if ($NativeWriteRoundTrip) {
         & $NativeTestRunner 'daemon::tests::native_live_controls_round_trip' --exact --ignored --nocapture
         if ($LASTEXITCODE) { throw 'The native application live control test failed.' }
+    }
+    if ($DynamicsRoundTrip) {
+        & $NativeTestRunner 'daemon::tests::native_dynamics_reversible_round_trip' --exact --ignored --nocapture
+        if ($LASTEXITCODE) { throw 'Dynamics validation or restoration failed; stop further edits.' }
     }
 }
 if ($ReadOnly -and !$ProfileRoundTrip) { return }

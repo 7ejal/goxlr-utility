@@ -40,6 +40,21 @@ impl IPCClient {
         }
     }
 
+    pub async fn read_dynamics_parameter(
+        &mut self,
+        serial: &str,
+        control: goxlr_types::DynamicsControl,
+    ) -> Result<i32> {
+        match self
+            .request(DaemonRequest::ReadDynamicsParameter(serial.into(), control))
+            .await?
+        {
+            DaemonResponse::DynamicsParameter(raw) => Ok(raw),
+            DaemonResponse::Error(error) => Err(anyhow!(error)),
+            _ => bail!("Unexpected DSP dynamics response"),
+        }
+    }
+
     pub async fn read_recovery_partition(
         &mut self,
         serial: &str,
@@ -91,6 +106,7 @@ impl Client for IPCClient {
                 bail!("Received Mic Level as Response, shouldn't happen!");
             }
             DaemonResponse::MicEqParameter(_) => bail!("Unexpected DSP EQ readback response"),
+            DaemonResponse::DynamicsParameter(_) => bail!("Unexpected DSP dynamics response"),
             DaemonResponse::RecoveryPartition(_) => bail!("Unexpected recovery partition response"),
             DaemonResponse::Patch(_patch) => {
                 Err(anyhow!("Received Patch as response, shouldn't happen!"))

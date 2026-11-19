@@ -1842,7 +1842,7 @@ impl<'a> Device<'a> {
         length: u32,
     ) -> Result<Vec<u8>> {
         if self.hardware.device_type != DeviceType::Full
-            || !["1.5.1.901", "1.5.1.907", "1.5.1.908"]
+            || !["1.5.1.901", "1.5.1.907", "1.5.1.908", "1.5.1.909"]
                 .contains(&self.hardware.versions.firmware.to_string().as_str())
         {
             bail!("Recovery partition layout has not been traced for this firmware");
@@ -1863,12 +1863,33 @@ impl<'a> Device<'a> {
         band: u8,
         field: goxlr_types::MicEqField,
     ) -> Result<i32> {
-        use goxlr_usb::experimental_eq::{EqParameter, EqReadback};
+        use goxlr_usb::experimental_eq::EqParameter;
 
         let parameter = EqParameter::new(usize::from(band), field)?;
         if self.hardware.device_type != DeviceType::Full || !self.device_supports_eq_readback() {
             bail!("Live EQ readback requires hardware-validated bridge firmware");
         }
+        self.read_dsp_parameter(parameter).await
+    }
+
+    pub async fn read_dynamics_parameter(
+        &mut self,
+        control: goxlr_types::DynamicsControl,
+    ) -> Result<i32> {
+        if self.hardware.device_type != DeviceType::Full
+            || self.hardware.versions.firmware.to_string() != "1.5.1.909"
+        {
+            bail!("Dynamics readback requires the 909 bridge; 908 accepts only microphone EQ keys");
+        }
+        self.read_dsp_parameter(goxlr_usb::experimental_eq::EqParameter::dynamics(control))
+            .await
+    }
+
+    async fn read_dsp_parameter(
+        &mut self,
+        parameter: goxlr_usb::experimental_eq::EqParameter,
+    ) -> Result<i32> {
+        use goxlr_usb::experimental_eq::EqReadback;
         self.goxlr.submit_eq_read(parameter)?;
         let deadline = Instant::now() + Duration::from_secs(3);
         loop {
@@ -2060,6 +2081,33 @@ impl<'a> Device<'a> {
                         .set_effect_values(&[(band.bandwidth_key(), i32::from(raw))])?;
                 }
                 self.mic_profile.set_eq_bandwidth(band, raw)?;
+            }
+            GoXLRCommand::SetDynamicsParameter {
+                control,
+                raw,
+                expected_raw,
+                profile_name,
+            } => {
+                let parameter = goxlr_usb::experimental_eq::EqParameter::dynamics(control);
+                parameter.effect_write(raw)?;
+                parameter.effect_write(expected_raw)?;
+                if self.mic_profile.name() != profile_name {
+                    bail!("The active microphone profile changed");
+                }
+                if self.read_dynamics_parameter(control).await? != expected_raw {
+                    bail!("The active dynamics parameter changed; read it again before applying");
+                }
+                let confirmation = match self.goxlr.set_eq_parameter(parameter, raw) {
+                    Ok(()) => self.read_dynamics_parameter(control).await,
+                    Err(error) => Err(error),
+                };
+                if !matches!(confirmation, Ok(value) if value == raw) {
+                    // A failed read must not prevent sending the already-checked baseline.
+                    let restoration = self.goxlr.set_eq_parameter(parameter, expected_raw);
+                    bail!(
+                        "Dynamics confirmation failed ({confirmation:?}); baseline write result {restoration:?}. Read the device again before further edits"
+                    );
+                }
             }
             GoXLRCommand::SetMicEqParameter {
                 band,
@@ -4295,7 +4343,8 @@ impl<'a> Device<'a> {
     fn device_supports_eq_readback(&self) -> bool {
         // Reads on the experimental image establish the baseline for physical validation.
         self.hardware.device_type == DeviceType::Full
-            && self.hardware.versions.firmware.to_string() == "1.5.1.908"
+            && ["1.5.1.908", "1.5.1.909"]
+                .contains(&self.hardware.versions.firmware.to_string().as_str())
     }
 
     fn device_supports_native_eq_profile(&self) -> bool {

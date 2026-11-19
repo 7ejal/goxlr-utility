@@ -310,7 +310,8 @@ def verify_serialized_lab(lab, sections, symbols, same_size=False):
             assert trial.cpu.reg_read(UC_ARM_REG_SP) == 0x3ab70
             assert trial.cpu.reg_read(UC_ARM_REG_CPSR) == 0xa80000d3
             assert trial.read32(0x244) == 0xeb003c51
-            assert bytes(trial.cpu.mem_read(0x3967c, 976)) == bytes(976)
+            bridge_length = symbols["__bridge_load_end"] - 0x4f000
+            assert bytes(trial.cpu.mem_read(0x3967c, bridge_length)) == bytes(bridge_length)
             assert bytes(trial.cpu.mem_read(0x39f38, 864)) == bytes(864)
             for address, data in sections:
                 assert bytes(trial.cpu.mem_read(address, len(data))) == data
@@ -363,7 +364,7 @@ def verify_serialized_lab(lab, sections, symbols, same_size=False):
     print("PASS serialized lab early copy, zero-clear, registration, query and receive hook")
     if same_size:
         print("Cache-maintenance instructions execute in emulation; physical cache behavior is unmeasured")
-        return
+        return board
     fallback = Board(lab, [], symbols)
     fallback.cpu.reg_write(UC_ARM_REG_CPSR, 0xd3)
     fallback.cpu.reg_write(UC_ARM_REG_SP, 0x3a960)
@@ -378,6 +379,33 @@ def verify_serialized_lab(lab, sections, symbols, same_size=False):
     print("Boot2 copying, peripheral SHI and physical cache behavior are external assumptions")
 
 
+def verify_dynamics_allowlist(board):
+    bands = [0x126,0xf8,0x113,0x129,0x116,0x11d,0x12c,0x120,0x109,0x12f,0xf5,0x10c]
+    allowed = {base + field for base in bands for field in range(3)}
+    allowed.update(range(0x0a,0x10))
+    allowed.update(range(0x13c,0x141))
+    for key in range(0x168):
+        before = board.read32(0x38dd4 + 8)
+        # Simulate the existing transport draining the previous complete frame.
+        board.write32(0x38dd4 + 12, before)
+        response = board.dispatch(0, key.to_bytes(2,"little"))
+        if key not in allowed:
+            assert response == b"\x03", hex(key)
+            assert board.read32(0x38dd4 + 8) == before
+            continue
+        assert response == b"\x00", hex(key)
+        value = -50 if key == 0x13d else 0
+        pieces = [(value >> shift) & 127 for shift in [21,14,7,0]]
+        words = [0xf00001,0x380010,0x22ffff,
+                 (key>>7)<<16 | (key&127)<<8 | 255,
+                 pieces[0]<<16 | pieces[1]<<8 | 255,
+                 pieces[2]<<16 | pieces[3]<<8 | 255,0xf7ffff]
+        for word in words:
+            board.call("goxlr_eq_observe_shi_word", (word,))
+        assert board.dispatch(1) == bytes([0])+key.to_bytes(2,"little")+value.to_bytes(4,"little",signed=True)
+    print("PASS actual serialized 909 bridge: all 47 EQ/dynamics keys, 313 rejected keys, signed replies")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("firmware", type=Path)
@@ -386,6 +414,7 @@ def main():
     parser.add_argument("--same-size", type=Path)
     parser.add_argument("--boot2", type=Path)
     parser.add_argument("--golden", type=Path)
+    parser.add_argument("--dynamics", action="store_true")
     args = parser.parse_args()
     stock = args.firmware.read_bytes()
     assert hashlib.sha256(stock).hexdigest() == STOCK_SHA
@@ -396,7 +425,10 @@ def main():
     if args.lab:
         verify_serialized_lab(args.lab.read_bytes(), sections, symbols)
     if args.same_size:
-        verify_serialized_lab(args.same_size.read_bytes(), sections, symbols, same_size=True)
+        board = verify_serialized_lab(args.same_size.read_bytes(), sections, symbols, same_size=True)
+        if args.dynamics:
+            assert struct.unpack_from("<I", args.same_size.read_bytes(), 0x1c)[0] == 909
+            verify_dynamics_allowlist(board)
         if args.boot2 and args.golden:
             verify_physical_boot2(stock, args.boot2.read_bytes(), args.golden.read_bytes(), args.same_size.read_bytes()[0x24:])
 

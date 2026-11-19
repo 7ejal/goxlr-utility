@@ -16,6 +16,9 @@ output_dir="$(cd -- "$output_dir" && pwd)"
 [[ "$output_dir" != "$source_dir" ]] || { echo "Choose a separate build directory" >&2; exit 1; }
 
 common=(-B "$toolchain_dir/" -march=armv5te -ffreestanding -fno-builtin -Wall -Wextra -Werror)
+if [[ "${GOXLR_DYNAMICS_BRIDGE:-0}" == 1 ]]; then
+    common+=(-DGOXLR_DYNAMICS_BRIDGE)
+fi
 for source in goxlr_eq_readback_bridge goxlr_eq_board; do
     "$toolchain_dir/arm-none-eabi-gcc" "${common[@]}" -mthumb -mthumb-interwork -Oz \
         -fno-jump-tables -DGOXLR_EQ_FIRMWARE -DGOXLR_EQ_TIMEOUT_TICKS="$timeout_ticks" \

@@ -14,6 +14,11 @@ use std::time::Duration;
 
 pub const VERIFIED_FIRMWARE: &str = "1.5.1.907";
 pub const READBACK_FIRMWARE: &str = "1.5.1.908";
+pub const DYNAMICS_FIRMWARE: &str = "1.5.1.909";
+pub const DYNAMICS_CONTROLS_VERIFIED: bool = false;
+pub fn has_readback(firmware: &str) -> bool {
+    [READBACK_FIRMWARE, DYNAMICS_FIRMWARE].contains(&firmware)
+}
 // All 12 bands passed reversible physical frequency, gain and width tests on 908.
 pub const NATIVE_CONTROLS_VERIFIED: bool = true;
 
@@ -22,6 +27,7 @@ pub struct Live {
     pub key: ProfileKey,
     pub firmware: String,
     pub bands: Bands,
+    pub dynamics: Option<[i32; 11]>,
 }
 
 #[derive(Clone, Copy)]
@@ -71,6 +77,7 @@ fn read_bands(serial: &str, mixer: &MixerStatus) -> Result<Live> {
         },
         firmware: mixer.hardware.versions.firmware.to_string(),
         bands,
+        dynamics: None,
     })
 }
 
@@ -87,7 +94,7 @@ pub async fn read() -> Result<Vec<Live>> {
             .collect::<Result<Vec<_>>>()?;
         devices.sort_by(|a, b| a.key.serial.cmp(&b.key.serial));
         for device in &mut devices {
-            if device.firmware == READBACK_FIRMWARE {
+            if has_readback(&device.firmware) {
                 for (index, band) in device.bands.iter_mut().enumerate() {
                     use goxlr_types::MicEqField::{Frequency, Gain, Width};
                     let number = (index + 1) as u8;
@@ -112,10 +119,66 @@ pub async fn read() -> Result<Vec<Live>> {
                 }
             }
         }
+        for device in &mut devices {
+            if device.firmware == DYNAMICS_FIRMWARE {
+                let mut values = [0; 11];
+                for (index, control) in goxlr_types::DynamicsControl::ALL.into_iter().enumerate() {
+                    values[index] = client
+                        .read_dynamics_parameter(&device.key.serial, control)
+                        .await?;
+                    ensure!(
+                        control.range().contains(&values[index]),
+                        "Dynamics readback out of range"
+                    );
+                }
+                device.dynamics = Some(values);
+            }
+        }
         Ok(devices)
     })
     .await
     .context("Daemon status timed out")?
+}
+
+pub async fn apply_dynamics(expected: Live, index: usize, raw: i32) -> Result<Vec<Live>> {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        ensure!(
+            expected.firmware == DYNAMICS_FIRMWARE,
+            "Dynamics bridge is unavailable"
+        );
+        let control = *goxlr_types::DynamicsControl::ALL
+            .get(index)
+            .context("Invalid dynamics control")?;
+        ensure!(
+            control.range().contains(&raw),
+            "Dynamics value is out of range"
+        );
+        let baseline = expected.dynamics.context("Read dynamics before editing")?;
+        let mut client = connect().await?;
+        client
+            .command(
+                &expected.key.serial,
+                GoXLRCommand::SetDynamicsParameter {
+                    control,
+                    raw,
+                    expected_raw: baseline[index],
+                    profile_name: expected.key.name.clone(),
+                },
+            )
+            .await?;
+        let devices = read().await?;
+        let actual = devices
+            .iter()
+            .find(|device| device.key == expected.key)
+            .context("The microphone profile changed")?;
+        ensure!(
+            actual.dynamics.is_some_and(|values| values[index] == raw),
+            "Dynamics write was not confirmed"
+        );
+        Ok(devices)
+    })
+    .await
+    .context("Dynamics operation timed out; read the device again before further edits")?
 }
 
 pub async fn apply(expected: Live, index: usize, edit: Edit) -> Result<Live> {
@@ -130,7 +193,7 @@ pub async fn apply(expected: Live, index: usize, edit: Edit) -> Result<Live> {
             .filter(|mixer| mixer.hardware.device_type == DeviceType::Full)
             .context("Full-size GoXLR disconnected")?;
         let current = read_bands(serial, mixer)?;
-        if current.firmware == READBACK_FIRMWARE {
+        if has_readback(&current.firmware) {
             use goxlr_types::MicEqField::{Frequency, Gain, Width};
             ensure!(
                 NATIVE_CONTROLS_VERIFIED,
@@ -267,11 +330,59 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Requires the specifically authorized 909 image and updated daemon; restores every dynamics edit"]
+    async fn native_dynamics_reversible_round_trip() -> Result<()> {
+        let devices = read().await?;
+        ensure!(
+            devices.len() == 1 && devices[0].firmware == DYNAMICS_FIRMWARE,
+            "Exactly one approved 909 device is required"
+        );
+        let baseline = devices[0].clone();
+        let values = baseline
+            .dynamics
+            .context("Missing original dynamics snapshot")?;
+        for (index, control) in goxlr_types::DynamicsControl::ALL.into_iter().enumerate() {
+            let test_value = if values[index] < *control.range().end() {
+                values[index] + 1
+            } else {
+                values[index] - 1
+            };
+            let changed = apply_dynamics(baseline.clone(), index, test_value).await;
+            let current = read()
+                .await?
+                .into_iter()
+                .find(|device| device.key == baseline.key)
+                .context("Device/profile changed; restoration could not be verified")?;
+            let restored = apply_dynamics(current, index, values[index]).await?;
+            let actual = restored
+                .iter()
+                .find(|device| device.key == baseline.key)
+                .context("Original microphone profile changed")?;
+            ensure!(
+                actual.bands == baseline.bands && actual.dynamics == baseline.dynamics,
+                "The complete EQ/dynamics baseline was not restored"
+            );
+            let edited = changed?;
+            let actual = edited
+                .iter()
+                .find(|device| device.key == baseline.key)
+                .context("Device disconnected")?;
+            let mut expected = values;
+            expected[index] = test_value;
+            ensure!(
+                actual.bands == baseline.bands && actual.dynamics == Some(expected),
+                "Another parameter changed during the dynamics test"
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     #[ignore = "Requires physically validated 908 controls and the research daemon; restores every edited field"]
     async fn native_live_controls_round_trip() -> Result<()> {
         let devices = read().await?;
         ensure!(
-            devices.len() == 1 && devices[0].firmware == READBACK_FIRMWARE,
+            devices.len() == 1 && has_readback(&devices[0].firmware),
             "Expected exactly one experimental 908 device"
         );
         let initial = devices[0].clone();
@@ -319,7 +430,7 @@ mod tests {
     async fn native_live_readback_snapshot() -> Result<()> {
         let devices = read().await?;
         ensure!(
-            devices.len() == 1 && devices[0].firmware == READBACK_FIRMWARE,
+            devices.len() == 1 && has_readback(&devices[0].firmware),
             "Expected exactly one experimental 908 device"
         );
         for band in devices[0].bands {
@@ -382,6 +493,20 @@ mod tests {
                     socket.send(DaemonResponse::MicEqParameter(raw)).await?;
                 }
             }
+            for control in goxlr_types::DynamicsControl::ALL {
+                match socket.read().await.context("Missing dynamics request")?? {
+                    DaemonRequest::ReadDynamicsParameter(serial, received) => {
+                        ensure!(
+                            serial == "fixture" && received == control,
+                            "Wrong dynamics request"
+                        );
+                    }
+                    _ => anyhow::bail!("Unexpected dynamics request"),
+                }
+                socket
+                    .send(DaemonResponse::DynamicsParameter(*control.range().start()))
+                    .await?;
+            }
             socket.read().await.context("Missing timeout probe")??;
             socket
                 .send(DaemonResponse::Error("Simulated DSP timeout".into()))
@@ -405,6 +530,13 @@ mod tests {
                     "Wrong simulated parameter"
                 );
             }
+        }
+        for control in goxlr_types::DynamicsControl::ALL {
+            ensure!(
+                client.read_dynamics_parameter("fixture", control).await?
+                    == *control.range().start(),
+                "Wrong dynamics response"
+            );
         }
         let error = client
             .read_mic_eq_parameter("fixture", 1, MicEqField::Width)
@@ -434,6 +566,7 @@ mod tests {
             },
             firmware: "1.5.1.907".into(),
             bands: defaults(),
+            dynamics: None,
         };
         assert!(matches!(
             stock_command(&live, &live, 5, Edit::Frequency(1500.)),

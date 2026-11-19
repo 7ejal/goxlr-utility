@@ -48,9 +48,22 @@ if ($DryRun) {
 if ($Firmware) {
     $Firmware = (Resolve-Path -LiteralPath $Firmware).Path
     $image = [IO.File]::ReadAllBytes($Firmware)
+    $build = [BitConverter]::ToUInt32($image, 0x1c)
+    $approvedImages = @{
+        908 = 'C8607989063552E5A412AD3B29B4E1DB355D9B737DCC59D972A5349FBFAA970F'
+        909 = '74555B3667DCB7150930AE544BDFCF732FEBF7BB6A0AA9B7CFD9B513FFA3C74B'
+    }
     if ($image.Length -ne 640044 -or [Text.Encoding]::ASCII.GetString($image, 0, 14) -ne 'GoXLR Firmware' -or
-        [BitConverter]::ToUInt32($image, 0x1c) -ne 908 -or [BitConverter]::ToUInt32($image, 0x28) -ne 0xe897) {
-        throw 'Expected the same-size experimental 908 image.'
+        !$approvedImages.ContainsKey([int]$build) -or [BitConverter]::ToUInt32($image, 0x28) -ne 0xe897 -or
+        (Get-FileHash -LiteralPath $Firmware).Hash -ne $approvedImages[[int]$build]) {
+        throw 'Expected an exact recorded 908 or 909 same-size image.'
+    }
+    if ($build -eq 909) {
+        $manifest = Get-Content -Raw (Join-Path $PSScriptRoot '../native-mic-eq/BUILD-909.json') | ConvertFrom-Json
+        if ((Get-FileHash $OriginalDaemon).Hash -ne $manifest.windows_daemon_sha256 -or
+            (Get-FileHash $ResearchDaemon).Hash -ne $manifest.windows_daemon_sha256) {
+            throw 'Install the recorded 909-compatible daemon before this update; the older daemon cannot preserve native EQ replay on 909.'
+        }
     }
 }
 if (Test-Path -LiteralPath $OutputDirectory) { throw 'Choose a new output directory.' }
@@ -103,7 +116,7 @@ try {
         for ($attempt = 0; $attempt -lt 150; $attempt++) {
             try {
                 $live = (Request 'GetStatus').Status
-                if (($live.mixers.$serial.hardware.versions.firmware -join '.') -eq '1.5.1.908') {
+                if (($live.mixers.$serial.hardware.versions.firmware -join '.') -eq "1.5.1.$build") {
                     $booted = $true
                     break
                 }
@@ -111,9 +124,9 @@ try {
             Start-Sleep -Milliseconds 200
         }
         if (!$booted) {
-            throw 'The device did not report experimental firmware 908 after reconnect.'
+            throw "The device did not report experimental firmware $build after reconnect."
         }
-        'Experimental firmware 908 enumerated.'
+        "Experimental firmware $build enumerated."
     } else {
       foreach ($partition in 'boot2', 'golden') {
         & $RecoveryReader $partition (Join-Path $output "$partition.bin")

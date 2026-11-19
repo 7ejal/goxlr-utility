@@ -26,6 +26,7 @@ pub enum DaemonRequest {
     Daemon(DaemonCommand),
     GetMicLevel(String),
     ReadMicEqParameter(String, u8, goxlr_types::MicEqField),
+    ReadDynamicsParameter(String, goxlr_types::DynamicsControl),
     ReadRecoveryPartition(String, goxlr_types::RecoveryPartition, u32, u32),
     Command(String, GoXLRCommand),
     RunFirmwareUpdate(String, Option<PathBuf>, bool),
@@ -40,6 +41,7 @@ pub enum DaemonResponse {
     Error(String),
     MicLevel(f64),
     MicEqParameter(i32),
+    DynamicsParameter(i32),
     RecoveryPartition(Vec<u8>),
     Status(DaemonStatus),
     Patch(Patch),
@@ -169,6 +171,12 @@ pub enum GoXLRCommand {
     SetMicEqParameter {
         band: u8,
         field: goxlr_types::MicEqField,
+        raw: i32,
+        expected_raw: i32,
+        profile_name: String,
+    },
+    SetDynamicsParameter {
+        control: goxlr_types::DynamicsControl,
         raw: i32,
         expected_raw: i32,
         profile_name: String,

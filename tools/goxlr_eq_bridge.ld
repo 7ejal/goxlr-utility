@@ -14,4 +14,5 @@ SECTIONS
     } > bridge
     /DISCARD/ : { *(.comment*) *(.note*) *(.ARM.attributes) }
     ASSERT(__bridge_bss_end <= 0x50000, "Bridge exceeds experimental reservation")
+    ASSERT(__bridge_bss_end <= 0x4f400, "Bridge overlaps same-size reset helper")
 }

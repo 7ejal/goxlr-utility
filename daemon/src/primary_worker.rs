@@ -57,6 +57,11 @@ pub enum DeviceCommand {
         goxlr_types::MicEqField,
         oneshot::Sender<Result<i32>>,
     ),
+    ReadDynamicsParameter(
+        String,
+        goxlr_types::DynamicsControl,
+        oneshot::Sender<Result<i32>>,
+    ),
     RunFirmwareUpdate(String, Option<PathBuf>, bool, oneshot::Sender<Result<()>>),
     ContinueFirmwareUpdate(String, oneshot::Sender<Result<()>>),
     ClearFirmwareState(String, oneshot::Sender<Result<()>>),
@@ -550,6 +555,14 @@ pub async fn spawn_usb_handler(
                         let _ = sender.send(result);
                     },
 
+                    DeviceCommand::ReadDynamicsParameter(serial, control, sender) => {
+                        let result = if let Some(device) = devices.get_mut(&serial) {
+                            device.read_dynamics_parameter(control).await
+                        } else {
+                            Err(anyhow!("Device {} is not connected", serial))
+                        };
+                        let _ = sender.send(result);
+                    },
                     DeviceCommand::RunFirmwareUpdate(serial, file, force, sender) => {
                         let mut start_update = true;
                         if let Some(device) = devices.get_mut(&serial) {
