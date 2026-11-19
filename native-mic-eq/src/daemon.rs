@@ -330,6 +330,106 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Requires the authorized 909 image; edits and restores all 47 fields"]
+    async fn native_all_parameters_reversible_round_trip() -> Result<()> {
+        let devices = read().await?;
+        ensure!(
+            devices.len() == 1 && devices[0].firmware == DYNAMICS_FIRMWARE,
+            "Exactly one approved 909 device is required"
+        );
+        let baseline = devices[0].clone();
+        let dynamics = baseline.dynamics.context("Missing dynamics snapshot")?;
+        for parameter in 0..47 {
+            let (changed, restored, observed) = if parameter < 36 {
+                let index = parameter / 3;
+                let band = baseline.bands[index];
+                let (edit, undo) = match parameter % 3 {
+                    0 => {
+                        let raw = (24. * (band.hz / 20.).log2()).round() as i32;
+                        let next = if raw < 240 { raw + 1 } else { raw - 1 };
+                        (
+                            Edit::Frequency(20. * 2_f32.powf(next as f32 / 24.)),
+                            Edit::Frequency(band.hz),
+                        )
+                    }
+                    1 => (
+                        Edit::Gain(if band.gain < 12 {
+                            band.gain + 1
+                        } else {
+                            band.gain - 1
+                        }),
+                        Edit::Gain(band.gain),
+                    ),
+                    _ => {
+                        let raw = band.raw.context("Missing width")?;
+                        (
+                            Edit::Width(if raw < 32 { raw + 1 } else { raw - 1 }),
+                            Edit::Width(raw),
+                        )
+                    }
+                };
+                let changed = apply(baseline.clone(), index, edit).await;
+                let observed = read().await;
+                // Attempt restoration even when the complete verification read fails.
+                let current = observed
+                    .as_ref()
+                    .ok()
+                    .and_then(|d| d.first())
+                    .cloned()
+                    .or_else(|| changed.as_ref().ok().cloned())
+                    .unwrap_or_else(|| baseline.clone());
+                let restored = apply(current, index, undo).await.map(|_| ());
+                (changed.map(|live| vec![live]), restored, observed)
+            } else {
+                let index = parameter - 36;
+                let control = goxlr_types::DynamicsControl::ALL[index];
+                let next = if dynamics[index] < *control.range().end() {
+                    dynamics[index] + 1
+                } else {
+                    dynamics[index] - 1
+                };
+                let changed = apply_dynamics(baseline.clone(), index, next).await;
+                let observed = read().await;
+                let current = observed
+                    .as_ref()
+                    .ok()
+                    .and_then(|d| d.first())
+                    .cloned()
+                    .or_else(|| changed.as_ref().ok().and_then(|d| d.first()).cloned())
+                    .unwrap_or_else(|| baseline.clone());
+                let restored = apply_dynamics(current, index, dynamics[index])
+                    .await
+                    .map(|_| ());
+                (changed, restored, observed)
+            };
+            restored.context("Restoration failed; stop further edits")?;
+            let after = read().await?;
+            ensure!(
+                after.len() == 1
+                    && after[0].key == baseline.key
+                    && after[0].bands == baseline.bands
+                    && after[0].dynamics == baseline.dynamics,
+                "The complete 47-field baseline was not restored"
+            );
+            let expected = changed?;
+            let actual = observed?;
+            ensure!(
+                actual.len() == 1
+                    && actual[0].key == baseline.key
+                    && actual[0].bands == expected[0].bands
+                    && actual[0].dynamics == expected[0].dynamics,
+                "Another parameter changed during test {}",
+                parameter + 1
+            );
+            println!(
+                "PASS parameter {}/47: live write/read and complete restoration",
+                parameter + 1
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     #[ignore = "Requires the specifically authorized 909 image and updated daemon; restores every dynamics edit"]
     async fn native_dynamics_reversible_round_trip() -> Result<()> {
         let devices = read().await?;

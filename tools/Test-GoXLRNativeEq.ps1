@@ -6,6 +6,7 @@ param(
     [string]$NativeTestRunner,
     [switch]$NativeWriteRoundTrip,
     [switch]$DynamicsRoundTrip,
+    [switch]$AllParametersRoundTrip,
     [switch]$ProfileRoundTrip,
     [ValidateRange(0.001,0.08)][double]$ToneAmplitude = 0.06,
     [switch]$ContinueAfterAudioFailure,
@@ -25,7 +26,7 @@ if ($devices.Count -ne 1 -or $devices[0].Value.hardware.device_type -ne 'Full' -
     ($devices[0].Value.hardware.versions.firmware -join '.') -notin @('1.5.1.908','1.5.1.909')) {
     throw 'Exactly one full-size GoXLR on experimental 908 or 909 is required.'
 }
-if ($DynamicsRoundTrip -and (!$NativeTestRunner -or ($devices[0].Value.hardware.versions.firmware -join '.') -ne '1.5.1.909')) {
+if (($DynamicsRoundTrip -or $AllParametersRoundTrip) -and (!$NativeTestRunner -or ($devices[0].Value.hardware.versions.firmware -join '.') -ne '1.5.1.909')) {
     throw 'Dynamics validation requires 909 and the explicitly supplied native test runner.'
 }
 $device = $devices[0].Name
@@ -56,6 +57,24 @@ if ($NativeTestRunner) {
     if ($DynamicsRoundTrip) {
         & $NativeTestRunner 'daemon::tests::native_dynamics_reversible_round_trip' --exact --ignored --nocapture
         if ($LASTEXITCODE) { throw 'Dynamics validation or restoration failed; stop further edits.' }
+    }
+    if ($AllParametersRoundTrip) {
+        $dynamics = @()
+        foreach ($control in 'DeesserEnabled','DeesserAmount','DeesserAttack','DeesserRelease','DeesserMode',
+            'DeesserScalar','CompressorRatio','CompressorThreshold','CompressorAttack','CompressorRelease','CompressorMakeup') {
+            $first = (Send-Request @{ ReadDynamicsParameter = @($device, $control) }).DynamicsParameter
+            $second = (Send-Request @{ ReadDynamicsParameter = @($device, $control) }).DynamicsParameter
+            if ($null -eq $first -or $first -ne $second) { throw 'Unstable dynamics snapshot; no test writes.' }
+            $dynamics += [pscustomobject]@{ Control = $control; Raw = $first }
+        }
+        $dynamics | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'dynamics-baseline.json')
+        & $NativeTestRunner 'daemon::tests::native_all_parameters_reversible_round_trip' --exact --ignored --nocapture
+        if ($LASTEXITCODE) { throw '47-field validation or restoration failed; stop further edits.' }
+        foreach ($item in $dynamics) {
+            if ((Send-Request @{ ReadDynamicsParameter = @($device, $item.Control) }).DynamicsParameter -ne $item.Raw) {
+                throw 'Dynamics snapshot was not restored.'
+            }
+        }
     }
 }
 if ($ReadOnly -and !$ProfileRoundTrip) { return }

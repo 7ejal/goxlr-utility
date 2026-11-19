@@ -16,6 +16,15 @@
   "construction_baseline_sha256": "eea92925a5d4eb0111943f72ce7bfeb0351e9390506feca17ac6a0c3b8346c13",
   "change": "Reuse the 908 bridge, add read permission for stock de-esser 0x0A..0x0F and microphone compressor 0x13C..0x140; retain EQ whitelist and all existing transport/state behavior",
   "expected_size": 640044,
-  "preserve": ["908 image", "installed daemon/app", "microphone profiles", "DSP records", "Boot2", "Golden"],
-  "flash_authorized": false
+  "preserve": [
+    "908 image",
+    "installed daemon/app",
+    "microphone profiles",
+    "DSP records",
+    "Boot2",
+    "Golden"
+  ],
+  "flash_authorized": true,
+  "authorization_scope": "User-controlled update of this exact image and reversible physical tests, authorized 2026-11-19",
+  "native_47_field_test_sha256": "F9BF56891E0D0AB56D93CA851A003328448061EF2AA74D692718F7B754898571"
 }

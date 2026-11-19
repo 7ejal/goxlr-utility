@@ -1,5 +1,39 @@
 # 909 dynamics bridge — prepared, physical validation pending
 
+## Authorized user-controlled update preparation
+
+On 2026-11-19 the user authorized the exact SHA256 below for a user-controlled
+update and reversible tests. The firmware bytes are unchanged. Both matching
+Windows executables are now installed and their hashes verified. Original
+Utility/native executables, all profiles, configuration, known 908 image and
+Boot2/Golden are backed up: 95 files verified against a private SHA256 manifest.
+The existing bridge cannot read the running application bank; the 908 backup
+is the preserved exact tested image, not a fresh application-bank dump.
+The 36 current microphone parameters were read twice and saved before installation.
+Live profiles were saved for restart, with the original saved bytes separately
+preserved. The workflow retains that live baseline on disk after testing so a
+later restart does not discard unsaved pre-update microphone edits.
+
+Automatic approval review blocked restarting the installed Utility and supplied
+no reason. The daemon is currently stopped after the successful installation;
+no firmware update or post-install physical tests have run. No bypass attempted.
+`tools/Run-GoXLR909Test.cmd` is a user-run continuation: it starts the installed
+daemon, verifies backups and the 36-field baseline, displays the exact firmware
+hash and requires the user to type 909 before updating. Then it verifies the
+baseline again, captures the 11 real dynamics reads, runs the actual native
+47-field test and checks restoration. It stops on fallback, mismatch or timeout.
+Logs remain private in the configured lab output directory. This is an update
+and validation launcher, not a new audio application.
+
+`native_all_parameters_reversible_round_trip` edits each of 36 EQ and 11 dynamics
+parameters by one permitted step, verifies all 47 fields after each edit and
+restores the full baseline before continuing. It attempts restoration even if
+the intervening snapshot read fails. This test compiled and the isolated IPC
+tests pass; it remains ignored and has not run on physical 909. GUI dynamics
+editing stays disabled pending physical validation and separate processing tests.
+
+## Earlier preparation evidence
+
 Continuation from c62e0a8. The running physical unit remains on 908. No firmware
 was flashed, no replacement daemon/application installed and no dynamics
 parameters written to the physical device in this work. Native dynamics controls
