@@ -15,6 +15,7 @@ pub enum Command {
     SetEffectParameters,
     SubmitEqRead,
     PollEqRead,
+    ReadRecoveryPartition,
     SetMicrophoneParameters,
     GetMicrophoneLevel,
     SetColourMap(),
@@ -56,6 +57,7 @@ impl Command {
             Command::SetEffectParameters => 0x801 << 12,
             Command::SubmitEqRead => crate::experimental_eq::SUBMIT_COMMAND,
             Command::PollEqRead => crate::experimental_eq::POLL_COMMAND,
+            Command::ReadRecoveryPartition => 0x004005,
 
             // Animation Related Commands
             Command::SetAnimationMode => 0x816 << 12,

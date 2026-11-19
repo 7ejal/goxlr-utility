@@ -1835,6 +1835,22 @@ impl<'a> Device<'a> {
         Ok(value_changed)
     }
 
+    pub fn read_recovery_partition(
+        &mut self,
+        partition: goxlr_types::RecoveryPartition,
+        offset: u32,
+        length: u32,
+    ) -> Result<Vec<u8>> {
+        if self.hardware.device_type != DeviceType::Full
+            || !["1.5.1.901", "1.5.1.907", "1.5.1.908"]
+                .contains(&self.hardware.versions.firmware.to_string().as_str())
+        {
+            bail!("Recovery partition layout has not been traced for this firmware");
+        }
+        self.goxlr
+            .read_recovery_partition(partition, offset, length)
+    }
+
     pub async fn get_mic_level(&mut self) -> Result<f64> {
         let level = self.goxlr.get_microphone_level()?;
 
@@ -2065,6 +2081,7 @@ impl<'a> Device<'a> {
                 if self.read_mic_eq_parameter(band, field).await? != raw {
                     bail!("DSP readback did not match the requested EQ parameter");
                 }
+                self.mic_profile.set_native_eq_parameter(band, field, raw)?;
             }
             GoXLRCommand::SetEqFreq(freq, value) => {
                 let param = self.mic_profile.set_eq_freq(freq, value)?;
@@ -3985,6 +4002,60 @@ impl<'a> Device<'a> {
 
         self.apply_effects(keys)?;
 
+        if self.device_supports_native_eq_profile() {
+            self.apply_native_mic_eq_profile().await?;
+        }
+        Ok(())
+    }
+
+    async fn apply_native_mic_eq_profile(&mut self) -> Result<()> {
+        use goxlr_types::MicEqField;
+        use goxlr_usb::experimental_eq::EqParameter;
+
+        let mut changes = Vec::new();
+        for (index, value) in self
+            .mic_profile
+            .native_eq_parameters()
+            .into_iter()
+            .enumerate()
+        {
+            let Some(raw) = value else { continue };
+            let band = (index / 3 + 1) as u8;
+            let field = [MicEqField::Frequency, MicEqField::Gain, MicEqField::Width][index % 3];
+            let parameter = EqParameter::new(usize::from(band), field)?;
+            parameter.effect_write(raw)?;
+            let original = self.read_mic_eq_parameter(band, field).await?;
+            parameter.effect_write(original)?;
+            changes.push((band, field, parameter, original, raw));
+        }
+        for (index, &(band, field, parameter, _, raw)) in changes.iter().enumerate() {
+            let result = async {
+                self.goxlr.set_eq_parameter(parameter, raw)?;
+                if self.read_mic_eq_parameter(band, field).await? != raw {
+                    bail!("Native EQ profile readback did not match");
+                }
+                Ok::<_, anyhow::Error>(())
+            }
+            .await;
+            if let Err(error) = result {
+                let mut restore_error = None;
+                for &(_, _, parameter, original, _) in changes[..=index].iter().rev() {
+                    if let Err(restore) = self.goxlr.set_eq_parameter(parameter, original) {
+                        restore_error.get_or_insert(restore);
+                    }
+                }
+                if let Some(restore) = restore_error {
+                    bail!("Native EQ profile restore writes failed after {error}: {restore}");
+                }
+                // Restore every changed field before querying a potentially desynchronized bridge.
+                for &(band, field, _, original, _) in changes[..=index].iter().rev() {
+                    if self.read_mic_eq_parameter(band, field).await? != original {
+                        bail!("Native EQ profile restore failed after {error}");
+                    }
+                }
+                return Err(error);
+            }
+        }
         Ok(())
     }
 
@@ -4202,8 +4273,14 @@ impl<'a> Device<'a> {
     }
 
     fn device_supports_eq_readback(&self) -> bool {
-        // Enable only after this bridge's USB transport and physical EQ tests pass.
-        false
+        // Reads on the experimental image establish the baseline for physical validation.
+        self.hardware.device_type == DeviceType::Full
+            && self.hardware.versions.firmware.to_string() == "1.5.1.908"
+    }
+
+    fn device_supports_native_eq_profile(&self) -> bool {
+        // Enable only for the bridge whose 12 bands passed physical audio validation.
+        self.device_supports_eq_readback()
     }
 
     fn device_supports_mic_eq_bandwidth(&self) -> bool {

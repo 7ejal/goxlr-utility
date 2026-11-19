@@ -206,6 +206,12 @@ async fn websocket(
                                                         data: DaemonResponse::MicEqParameter(raw),
                                                     })
                                                 }
+                                                DaemonResponse::RecoveryPartition(data) => {
+                                                    WsResponse(WebsocketResponse {
+                                                        id: request_id,
+                                                        data: DaemonResponse::RecoveryPartition(data),
+                                                    })
+                                                }
                                                 _ => {
                                                     // This should never fucking happen
                                                     break Some(CloseReason {

@@ -5,6 +5,7 @@ param(
     [string]$Capture = 'Chat Mic (TC-HELICON GoXLR)',
     [double]$ToneAmplitude = 0.04,
     [string]$Client,
+    [switch]$LibraryOnly,
     [ValidateSet("31","63","125","250","500","1000","2000","4000","8000","16000")][string]$Band
 )
 $ErrorActionPreference = 'Stop'
@@ -171,6 +172,7 @@ function Measure-Edit($kind, $value) {
     }
 }
 
+if ($LibraryOnly) { return }
 $hz = [double[]]@(700,1000,1500,2300)
 if ($Band) {
     if (!$Client -or !(Test-Path -LiteralPath $Client -PathType Leaf)) { throw 'Pass the existing GoXLR client executable.' }

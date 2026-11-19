@@ -607,6 +607,29 @@ pub enum MicEqField {
     Width,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum RecoveryPartition {
+    Boot2,
+    Golden,
+}
+
+impl RecoveryPartition {
+    pub fn flash_index(self) -> u32 {
+        match self {
+            Self::Boot2 => 0,
+            Self::Golden => 2,
+        }
+    }
+
+    pub fn length(self) -> u32 {
+        match self {
+            Self::Boot2 => 0x10000,
+            Self::Golden => 0xd0000,
+        }
+    }
+}
+
 impl EqFrequencies {
     pub fn bandwidth_key(self) -> EffectKey {
         match self {

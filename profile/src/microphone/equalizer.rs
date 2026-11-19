@@ -23,6 +23,7 @@ pub enum ParseError {
 #[derive(Debug)]
 pub struct Equalizer {
     bandwidth: [u8; 10],
+    native_parameters: [Option<i32>; 36],
     eq_31h_gain: i8,
     eq_63h_gain: i8,
     eq_125h_gain: i8,
@@ -56,6 +57,7 @@ impl Equalizer {
     pub fn new() -> Self {
         Self {
             bandwidth: [16; 10],
+            native_parameters: [None; 36],
             eq_31h_gain: 0,
             eq_63h_gain: 0,
             eq_125h_gain: 0,
@@ -91,6 +93,30 @@ impl Equalizer {
             bail!("Microphone EQ bandwidth must be between 0 and 32");
         }
         *value = raw;
+        self.native_parameters[band * 3 + 2] = None;
+        Ok(())
+    }
+
+    pub fn native_parameters(&self) -> &[Option<i32>; 36] {
+        &self.native_parameters
+    }
+
+    pub fn set_native_parameter(&mut self, band: usize, field: usize, raw: i32) -> Result<()> {
+        if band >= 12 || field >= 3 {
+            bail!("Invalid native microphone EQ parameter");
+        }
+        let range = match field {
+            0 => 0..=240,
+            1 => -12..=12,
+            _ => 0..=32,
+        };
+        if !range.contains(&raw) {
+            bail!("Native microphone EQ value is out of range");
+        }
+        if band < 10 && field == 2 {
+            self.bandwidth[band] = raw as u8;
+        }
+        self.native_parameters[band * 3 + field] = Some(raw);
         Ok(())
     }
 
@@ -189,10 +215,35 @@ impl Equalizer {
             }
         }
 
+        // Parse overrides after legacy fields so XML attribute order cannot clear them.
+        if let Some(attr) = attributes
+            .iter()
+            .find(|attr| attr.name == "GOXLR_UTILITY_MIC_EQ_NATIVE")
+        {
+            let values = attr.value.split(',').collect::<Vec<_>>();
+            if values.len() != 36 {
+                return Err(anyhow!("Invalid native microphone EQ profile length").into());
+            }
+            for (index, value) in values.into_iter().enumerate() {
+                if value != "_" {
+                    self.set_native_parameter(index / 3, index % 3, value.parse::<i32>()?)?;
+                }
+            }
+        }
         Ok(())
     }
 
     pub fn write_equaliser(&self, attributes: &mut HashMap<String, String>) {
+        if self.native_parameters.iter().any(Option::is_some) {
+            attributes.insert(
+                "GOXLR_UTILITY_MIC_EQ_NATIVE".into(),
+                self.native_parameters
+                    .iter()
+                    .map(|value| value.map_or_else(|| "_".into(), |raw| raw.to_string()))
+                    .collect::<Vec<_>>()
+                    .join(","),
+            );
+        }
         if self.bandwidth != [16; 10] {
             attributes.insert(
                 "GOXLR_UTILITY_MIC_EQ_BANDWIDTH".to_string(),
@@ -366,51 +417,61 @@ impl Equalizer {
     pub fn set_eq_31h_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_31h_gain = value;
+        self.native_parameters[1] = None;
         Ok(())
     }
     pub fn set_eq_63h_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_63h_gain = value;
+        self.native_parameters[4] = None;
         Ok(())
     }
     pub fn set_eq_125h_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_125h_gain = value;
+        self.native_parameters[7] = None;
         Ok(())
     }
     pub fn set_eq_250h_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_250h_gain = value;
+        self.native_parameters[10] = None;
         Ok(())
     }
     pub fn set_eq_500h_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_500h_gain = value;
+        self.native_parameters[13] = None;
         Ok(())
     }
     pub fn set_eq_1k_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_1k_gain = value;
+        self.native_parameters[16] = None;
         Ok(())
     }
     pub fn set_eq_2k_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_2k_gain = value;
+        self.native_parameters[19] = None;
         Ok(())
     }
     pub fn set_eq_4k_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_4k_gain = value;
+        self.native_parameters[22] = None;
         Ok(())
     }
     pub fn set_eq_8k_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_8k_gain = value;
+        self.native_parameters[25] = None;
         Ok(())
     }
     pub fn set_eq_16k_gain(&mut self, value: i8) -> Result<()> {
         validate_gain(value)?;
         self.eq_16k_gain = value;
+        self.native_parameters[28] = None;
         Ok(())
     }
     pub fn set_eq_31h_freq(&mut self, value: f32) -> Result<()> {
@@ -423,6 +484,7 @@ impl Equalizer {
         }
 
         self.eq_31h_freq = value;
+        self.native_parameters[0] = None;
         Ok(())
     }
     pub fn set_eq_63h_freq(&mut self, value: f32) -> Result<()> {
@@ -434,6 +496,7 @@ impl Equalizer {
         }
 
         self.eq_63h_freq = value;
+        self.native_parameters[3] = None;
         Ok(())
     }
     pub fn set_eq_125h_freq(&mut self, value: f32) -> Result<()> {
@@ -445,6 +508,7 @@ impl Equalizer {
         }
 
         self.eq_125h_freq = value;
+        self.native_parameters[6] = None;
         Ok(())
     }
     pub fn set_eq_250h_freq(&mut self, value: f32) -> Result<()> {
@@ -456,6 +520,7 @@ impl Equalizer {
         }
 
         self.eq_250h_freq = value;
+        self.native_parameters[9] = None;
         Ok(())
     }
     pub fn set_eq_500h_freq(&mut self, value: f32) -> Result<()> {
@@ -467,6 +532,7 @@ impl Equalizer {
         }
 
         self.eq_500h_freq = value;
+        self.native_parameters[12] = None;
         Ok(())
     }
     pub fn set_eq_1k_freq(&mut self, value: f32) -> Result<()> {
@@ -477,6 +543,7 @@ impl Equalizer {
             bail!("1KHz Frequency must be a multiple of 100");
         }
         self.eq_1k_freq = value;
+        self.native_parameters[15] = None;
         Ok(())
     }
     pub fn set_eq_2k_freq(&mut self, value: f32) -> Result<()> {
@@ -487,6 +554,7 @@ impl Equalizer {
             bail!("2KHz Frequency must be a multiple of 100");
         }
         self.eq_2k_freq = value;
+        self.native_parameters[18] = None;
         Ok(())
     }
     pub fn set_eq_4k_freq(&mut self, value: f32) -> Result<()> {
@@ -497,6 +565,7 @@ impl Equalizer {
             bail!("4KHz Frequency must be a multiple of 100");
         }
         self.eq_4k_freq = value;
+        self.native_parameters[21] = None;
         Ok(())
     }
     pub fn set_eq_8k_freq(&mut self, value: f32) -> Result<()> {
@@ -507,6 +576,7 @@ impl Equalizer {
             bail!("8KHz Frequency must be a multiple of 100");
         }
         self.eq_8k_freq = value;
+        self.native_parameters[24] = None;
         Ok(())
     }
     pub fn set_eq_16k_freq(&mut self, value: f32) -> Result<()> {
@@ -517,6 +587,7 @@ impl Equalizer {
             bail!("16KHz Frequency must be a multiple of 100");
         }
         self.eq_16k_freq = value;
+        self.native_parameters[27] = None;
         Ok(())
     }
 

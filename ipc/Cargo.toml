@@ -26,5 +26,10 @@ async-trait = "0.1.89"
 
 # Used for Web Requests
 reqwest = { workspace = true, features = ["json"] }
+[[example]]
+name = "read-goxlr-recovery"
+path = "../tools/read_goxlr_recovery.rs"
+
 [dev-dependencies]
 serde_json = { workspace = true }
+tokio = { workspace = true }

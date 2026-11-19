@@ -47,6 +47,31 @@ pub trait ExecutableGoXLR {
 
 // These are commands that can be executed, but perform_request must be implemented..
 pub trait GoXLRCommands: ExecutableGoXLR {
+    fn read_recovery_partition(
+        &mut self,
+        partition: goxlr_types::RecoveryPartition,
+        offset: u32,
+        length: u32,
+    ) -> Result<Vec<u8>> {
+        if length == 0
+            || length > 1024
+            || offset
+                .checked_add(length)
+                .is_none_or(|end| end > partition.length())
+        {
+            bail!("Recovery partition read is out of bounds");
+        }
+        let mut request = [0; 12];
+        LittleEndian::write_u32(&mut request[..4], partition.flash_index());
+        LittleEndian::write_u32(&mut request[4..8], offset);
+        LittleEndian::write_u32(&mut request[8..], length);
+        let reply = self.request_data(Command::ReadRecoveryPartition, &request)?;
+        if reply.len() != length as usize {
+            bail!("Recovery partition read returned an unexpected length");
+        }
+        Ok(reply)
+    }
+
     fn submit_eq_read(&mut self, parameter: crate::experimental_eq::EqParameter) -> Result<()> {
         let reply = self.request_data(Command::SubmitEqRead, &parameter.read_request())?;
         match reply.as_slice() {

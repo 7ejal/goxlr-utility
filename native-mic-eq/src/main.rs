@@ -3,7 +3,7 @@
 mod daemon;
 mod model;
 
-use daemon::{Live, StockEdit};
+use daemon::{Edit, Live};
 use eframe::egui::{self, Color32, RichText};
 use model::LABELS;
 use std::{
@@ -18,6 +18,7 @@ struct App {
     error: Option<String>,
     frequency: f32,
     gain: i8,
+    width: u8,
     band: usize,
 }
 
@@ -50,6 +51,7 @@ impl App {
             let band = device.bands[self.band];
             self.frequency = band.hz;
             self.gain = band.gain;
+            self.width = band.raw.unwrap_or(16);
         }
     }
 }
@@ -125,10 +127,14 @@ impl eframe::App for App {
                 "Firmware {}  |  Mic profile {}",
                 device.firmware, device.key.name
             ));
-            ui.label(
-                "Frequency and gain show the active daemon settings. Effective Q is unmeasured.",
-            );
-            let verified = device.firmware == daemon::VERIFIED_FIRMWARE;
+            let readback = device.firmware == daemon::READBACK_FIRMWARE;
+            ui.label(if readback {
+                "All 12 bands show DSP readback. Q / width uses raw 0–32; numerical Q is not calibrated."
+            } else {
+                "Frequency and gain show the active daemon settings. Effective Q is unmeasured."
+            });
+            let native = readback && daemon::NATIVE_CONTROLS_VERIFIED;
+            let verified = device.firmware == daemon::VERIFIED_FIRMWARE || native;
             let mut edit = None;
             ui.add_space(10.);
             egui::Grid::new("device-eq")
@@ -139,7 +145,7 @@ impl eframe::App for App {
                         "Band",
                         "Frequency",
                         "Gain",
-                        "Profile width (raw 0–32)",
+                        "Width (raw 0–32)",
                         "Hardware write",
                     ] {
                         ui.label(RichText::new(label).strong());
@@ -148,14 +154,16 @@ impl eframe::App for App {
                     for (index, label) in LABELS.iter().enumerate() {
                         let band = device.bands[index];
                         ui.label(*label);
-                        if index < model::STOCK.len() {
-                            ui.label(format!("{} Hz", band.hz));
+                        if index < model::STOCK.len() || readback {
+                            ui.label(format!("{:.1} Hz", band.hz));
                             ui.label(format!("{:+} dB", band.gain));
                             ui.label(
                                 band.raw
                                     .map_or_else(|| "Unavailable".into(), |raw| raw.to_string()),
                             );
-                            ui.label(if verified {
+                            ui.label(if native {
+                                "Frequency, gain and width verified"
+                            } else if verified {
                                 "Frequency and gain verified"
                             } else {
                                 "Audio test pending"
@@ -177,7 +185,8 @@ impl eframe::App for App {
                 egui::ComboBox::from_id_salt("verified-band")
                     .selected_text(LABELS[self.band])
                     .show_ui(ui, |ui| {
-                        for (index, label) in LABELS[..model::STOCK.len()].iter().enumerate() {
+                        let count = if native { LABELS.len() } else { model::STOCK.len() };
+                        for (index, label) in LABELS[..count].iter().enumerate() {
                             ui.selectable_value(&mut self.band, index, *label);
                         }
                     });
@@ -185,8 +194,11 @@ impl eframe::App for App {
                 if self.band != previous_band {
                     self.frequency = band.hz;
                     self.gain = band.gain;
+                    self.width = band.raw.unwrap_or(16);
                 }
-                let (minimum, maximum, step, max_gain) = model::limits(self.band);
+                let (minimum, maximum, step, max_gain) = if native {
+                    (20., 20480., 1., 12)
+                } else { model::limits(self.band) };
                 ui.add_enabled_ui(self.pending.is_none(), |ui| {
                     ui.horizontal(|ui| {
                         ui.add(
@@ -196,11 +208,15 @@ impl eframe::App for App {
                                 .suffix(" Hz"),
                         );
                         let frequency = (self.frequency / step).round() * step;
+                        let frequency_changed = if native {
+                            (24. * (frequency / 20.).log2()).round()
+                                != (24. * (band.hz / 20.).log2()).round()
+                        } else { frequency != band.hz };
                         if ui
-                            .add_enabled(frequency != band.hz, egui::Button::new("Apply frequency"))
+                            .add_enabled(frequency_changed, egui::Button::new("Apply frequency"))
                             .clicked()
                         {
-                            edit = Some(StockEdit::Frequency(frequency));
+                            edit = Some(Edit::Frequency(frequency));
                         }
                         ui.add(
                             egui::DragValue::new(&mut self.gain)
@@ -211,9 +227,18 @@ impl eframe::App for App {
                             .add_enabled(self.gain != band.gain, egui::Button::new("Apply gain"))
                             .clicked()
                         {
-                            edit = Some(StockEdit::Gain(self.gain));
+                            edit = Some(Edit::Gain(self.gain));
                         }
                     });
+                    if native {
+                        ui.horizontal(|ui| {
+                            ui.label("Q / width (raw selector)");
+                            ui.add(egui::DragValue::new(&mut self.width).range(0..=32));
+                            if ui.add_enabled(Some(self.width) != band.raw, egui::Button::new("Apply width")).clicked() {
+                                edit = Some(Edit::Width(self.width));
+                            }
+                        });
+                    }
                 });
                 if let Some(edit) = edit {
                     let serial = device.key.serial.clone();
@@ -252,6 +277,7 @@ fn main() -> eframe::Result {
                 error: None,
                 frequency: 1000.,
                 gain: 0,
+                width: 16,
                 band: 5,
             };
             app.refresh(&cc.egui_ctx);

@@ -40,6 +40,28 @@ impl IPCClient {
         }
     }
 
+    pub async fn read_recovery_partition(
+        &mut self,
+        serial: &str,
+        partition: goxlr_types::RecoveryPartition,
+        offset: u32,
+        length: u32,
+    ) -> Result<Vec<u8>> {
+        match self
+            .request(DaemonRequest::ReadRecoveryPartition(
+                serial.into(),
+                partition,
+                offset,
+                length,
+            ))
+            .await?
+        {
+            DaemonResponse::RecoveryPartition(data) => Ok(data),
+            DaemonResponse::Error(error) => Err(anyhow!(error)),
+            _ => bail!("Unexpected recovery partition response"),
+        }
+    }
+
     async fn request(&mut self, request: DaemonRequest) -> Result<DaemonResponse> {
         self.socket
             .send(request)
@@ -69,6 +91,7 @@ impl Client for IPCClient {
                 bail!("Received Mic Level as Response, shouldn't happen!");
             }
             DaemonResponse::MicEqParameter(_) => bail!("Unexpected DSP EQ readback response"),
+            DaemonResponse::RecoveryPartition(_) => bail!("Unexpected recovery partition response"),
             DaemonResponse::Patch(_patch) => {
                 Err(anyhow!("Received Patch as response, shouldn't happen!"))
             }

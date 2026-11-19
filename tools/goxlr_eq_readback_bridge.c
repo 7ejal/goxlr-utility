@@ -1,5 +1,5 @@
-/* Reference for the ARM receive task. Callers serialize access and supply a
- * monotonic tick counter. This file is not linked into the GoXLR image. */
+/* Shared host-test and firmware readback state machine. The firmware bindings
+ * serialize access and supply the stock monotonic tick counter. */
 #include <stdbool.h>
 #include <stdint.h>
 

@@ -1,4 +1,4 @@
-//! Builds an emulator-only expanded ARM image. The updater magic is invalidated.
+//! Builds expanded lab images or a same-size experimental ARM image.
 use std::{
     env, fs,
     io::{self, Write},
@@ -23,16 +23,63 @@ fn crc(mut state: u32, bytes: &[u8]) -> u32 {
     state
 }
 
+fn same_size_image(original: &[u8], bridge: &[u8], stage: &[u8], firmware: bool) -> Vec<u8> {
+    const BRIDGE: usize = 0x394d0;
+    const STAGE: usize = 0x39d8c;
+    const ENTRY: usize = 0x244 - 0x1ac;
+    assert!(!bridge.is_empty() && bridge.len() <= 1060 && bridge.len() % 4 == 0);
+    assert!(!stage.is_empty() && stage.len() <= 864 && stage.len() % 4 == 0);
+    assert_eq!(word(stage, 0), 0xe92d503f);
+    assert!(
+        original[BRIDGE..BRIDGE + bridge.len()]
+            .iter()
+            .all(|&byte| byte == 0)
+    );
+    assert!(
+        original[STAGE..STAGE + stage.len()]
+            .iter()
+            .all(|&byte| byte == 0)
+    );
+    assert_eq!(word(original, ENTRY), 0xeb003c51);
+    let mut image = original.to_vec();
+    image[BRIDGE..BRIDGE + bridge.len()].copy_from_slice(bridge);
+    image[STAGE..STAGE + stage.len()].copy_from_slice(stage);
+    put(&mut image, ENTRY, 0xea000000 | ((0x39f38 - 0x244 - 8) / 4));
+    for offset in [0x1c, 0x2c, 0x3a2be] {
+        put(&mut image, offset, 908);
+    }
+    if !firmware {
+        image[..16].copy_from_slice(b"GXLAB_NOT_FLASH!");
+    }
+    let arm_crc = crc(0, &image[0x54..0x3a2ac]);
+    put(&mut image, 0x3a2ac, arm_crc);
+    let outer_crc = crc(u32::MAX, &image[0x18..]) ^ u32::MAX;
+    put(&mut image, 0x14, outer_crc);
+    let mut reversed = image.clone();
+    reversed[BRIDGE..BRIDGE + bridge.len()].fill(0);
+    reversed[STAGE..STAGE + stage.len()].fill(0);
+    reversed[..16].copy_from_slice(&original[..16]);
+    for offset in [ENTRY, 0x14, 0x1c, 0x2c, 0x3a2be, 0x3a2ac] {
+        put(&mut reversed, offset, word(original, offset));
+    }
+    assert_eq!(reversed, original);
+    assert_eq!(word(&image, 0x28), word(original, 0x28));
+    assert_eq!(image.len(), original.len());
+    println!("Same-size experimental 908, ARM CRC {arm_crc:08X}, outer CRC {outer_crc:08X}");
+    image
+}
+
 fn main() -> io::Result<()> {
     let args: Vec<_> = env::args_os().skip(1).map(PathBuf::from).collect();
-    if args.len() != 3
-        || args[2]
-            .extension()
-            .is_none_or(|extension| extension != "gxlab")
+    if ![3, 4].contains(&args.len())
+        || args
+            .last()
+            .and_then(|path| path.extension())
+            .is_none_or(|ext| ext != "gxlab" && !(args.len() == 4 && ext == "bin"))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Pass 907-image stage.bin output.gxlab",
+            "Pass 907-image stage.bin output.gxlab, or 907-image bridge.bin same-size-stage.bin output.gxlab|bin",
         ));
     }
     let original = fs::read(&args[0])?;
@@ -48,6 +95,19 @@ fn main() -> io::Result<()> {
     );
     assert_eq!(crc(0, &original[0x54..0x3a2ac]), word(&original, 0x3a2ac));
     assert_eq!(&original[0x3a2b0..0x3a2ba], b"TCHDSP_V2:");
+    if args.len() == 4 {
+        let image = same_size_image(
+            &original,
+            &stage,
+            &fs::read(&args[2])?,
+            args[3].extension().is_some_and(|ext| ext == "bin"),
+        );
+        return fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&args[3])?
+            .write_all(&image);
+    }
     assert!(!stage.is_empty() && stage.len() % 4 == 0);
     // Leave the active SVC stack and its saved registers outside the staging bytes.
     assert!(0x3a458 + stage.len() < 0x3a940);

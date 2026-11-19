@@ -44,6 +44,13 @@ pub enum DeviceCommand {
     RunDaemonCommand(DaemonCommand, oneshot::Sender<Result<()>>),
     RunDeviceCommand(String, GoXLRCommand, oneshot::Sender<Result<()>>),
     GetDeviceMicLevel(String, oneshot::Sender<Result<f64>>),
+    ReadRecoveryPartition(
+        String,
+        goxlr_types::RecoveryPartition,
+        u32,
+        u32,
+        oneshot::Sender<Result<Vec<u8>>>,
+    ),
     ReadMicEqParameter(
         String,
         u8,
@@ -523,6 +530,15 @@ pub async fn spawn_usb_handler(
                         } else {
                             let _ = sender.send(Err(anyhow!("Device {} is not connected", serial)));
                         }
+                    },
+
+                    DeviceCommand::ReadRecoveryPartition(serial, partition, offset, length, sender) => {
+                        let result = if let Some(device) = devices.get_mut(&serial) {
+                            device.read_recovery_partition(partition, offset, length)
+                        } else {
+                            Err(anyhow!("Device {} is not connected", serial))
+                        };
+                        let _ = sender.send(result);
                     },
 
                     DeviceCommand::ReadMicEqParameter(serial, band, field, sender) => {

@@ -37,7 +37,24 @@ checks the active mic profile and original EQ settings again before applying.
 Raw width is the profile code in the 0–32 range. Effective Q and files on disk
 are separate from the daemon's active settings.
 
-Firmware 907's four changed DSP words select two modes during construction.
-The extra stages lack a verified live USB mapping and the daemon cannot read
-back the active DSP bandwidth for a reversible write. The native client has no
-Q or extra-stage write path.
+Experimental same-size firmware 908 adds the ARM USB-to-DSP readback bridge.
+The physical device has returned matching repeated values for all 36 raw
+frequency, gain and width parameters across 12 bands. The native application
+reads these through the research daemon and displays them from DSP state.
+Frequency is decoded from its logarithmic selector. Width is a raw selector,
+not a calibrated numerical Q value.
+
+Native writes use expected-value checks and DSP readback confirmation. The
+12-band controls and automatic profile replay are enabled only on 908, after
+all twelve bands passed physical audio checks. Microphone profiles retain all
+36 optional native overrides. The original 907 frequency/gain behavior remains
+available. See [the measured results](FIRMWARE-908.md) for exact tested changes
+and the remaining experimental limits.
+
+See [ARM placement and hardware evidence](ARM-PLACEMENT.md) for the exact image,
+recovery results and outstanding gates. Use `tools/Read-GoXLRRecovery.ps1` with
+`-ValidationScript tools/Test-GoXLRNativeEq.ps1` to preserve profiles and the
+original daemon during the extended physical checks. `-ValidationArguments`
+accepts `ReadOnly`, `Bands` and `ContinueAfterAudioFailure`. The helper stops
+before writes when the signal is too quiet or the baseline is unstable, and
+requires all 36 original values after every tested band.

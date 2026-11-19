@@ -208,6 +208,32 @@ impl MicProfileAdapter {
         self.profile.equalizer().bandwidth()[band as usize]
     }
 
+    pub fn native_eq_parameters(&self) -> [Option<i32>; 36] {
+        let mut values = *self.profile.equalizer().native_parameters();
+        for band in 0..10 {
+            values[band * 3 + 2] = Some(i32::from(self.profile.equalizer().bandwidth()[band]));
+        }
+        // Legacy profiles flatten extra stages without inventing frequency or width values.
+        for index in [31, 34] {
+            values[index].get_or_insert(0);
+        }
+        values
+    }
+
+    pub fn set_native_eq_parameter(
+        &mut self,
+        band: u8,
+        field: goxlr_types::MicEqField,
+        raw: i32,
+    ) -> Result<()> {
+        let index = band
+            .checked_sub(1)
+            .ok_or_else(|| anyhow!("Invalid native EQ band"))?;
+        self.profile
+            .equalizer_mut()
+            .set_native_parameter(usize::from(index), field as usize, raw)
+    }
+
     pub fn set_eq_bandwidth(&mut self, band: EqFrequencies, raw: u8) -> Result<()> {
         self.profile
             .equalizer_mut()

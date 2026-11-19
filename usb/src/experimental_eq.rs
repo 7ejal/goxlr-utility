@@ -1,8 +1,8 @@
-//! Payloads for the experimental ARM EQ bridge. The USB command binding is pending.
+//! Payloads for the experimental 908 ARM EQ bridge; audio validation gates UI writes.
 
 use anyhow::{Result, bail, ensure};
 
-/// Proposed command numbers for patched firmware. Never probe them on stock.
+/// Commands registered by the patched 908 firmware. Never probe them on stock.
 pub const SUBMIT_COMMAND: u32 = 0x0081_9000;
 pub const POLL_COMMAND: u32 = 0x0081_9001;
 
@@ -44,8 +44,7 @@ impl EqParameter {
     }
 
     pub fn effect_write(self, value: i32) -> Result<[u8; 8]> {
-        // Keep writes within Utility gain limits. The DSP can report a wider range.
-        self.validate(value, 9)?;
+        self.validate(value, 12)?;
         let mut record = [0; 8];
         record[..4].copy_from_slice(&u32::from(self.key).to_le_bytes());
         record[4..].copy_from_slice(&value.to_le_bytes());
@@ -116,7 +115,7 @@ mod tests {
         assert!(EqParameter::new(13, EqField::Frequency).is_err());
         let gain = EqParameter::new(11, EqField::Gain)?;
         assert_eq!(gain.read_request(), [0xf6, 0]);
-        assert!(gain.effect_write(-10).is_err());
+        assert!(gain.effect_write(-13).is_err());
         assert_eq!(
             gain.poll_reply(&[0, 0xf6, 0, 0xf4, 0xff, 0xff, 0xff])?,
             EqReadback::Value(-12)
@@ -170,6 +169,26 @@ mod tests {
         assert!(device.poll_eq_read(width).is_err());
         assert!(device.submit_eq_read(width).is_err());
         assert!(device.set_eq_parameter(width, 33).is_err());
+        assert!(device.0.is_empty());
+        device.0.push_back((
+            Command::ReadRecoveryPartition,
+            vec![2, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0],
+            vec![0x11, 0x22],
+        ));
+        assert_eq!(
+            device.read_recovery_partition(goxlr_types::RecoveryPartition::Golden, 10, 2)?,
+            vec![0x11, 0x22]
+        );
+        assert!(
+            device
+                .read_recovery_partition(goxlr_types::RecoveryPartition::Boot2, u32::MAX, 1)
+                .is_err()
+        );
+        assert!(
+            device
+                .read_recovery_partition(goxlr_types::RecoveryPartition::Boot2, 0, 1025)
+                .is_err()
+        );
         assert!(device.0.is_empty());
         Ok(())
     }

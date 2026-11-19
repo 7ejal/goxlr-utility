@@ -26,6 +26,7 @@ pub enum DaemonRequest {
     Daemon(DaemonCommand),
     GetMicLevel(String),
     ReadMicEqParameter(String, u8, goxlr_types::MicEqField),
+    ReadRecoveryPartition(String, goxlr_types::RecoveryPartition, u32, u32),
     Command(String, GoXLRCommand),
     RunFirmwareUpdate(String, Option<PathBuf>, bool),
     ContinueFirmwareUpdate(String),
@@ -39,6 +40,7 @@ pub enum DaemonResponse {
     Error(String),
     MicLevel(f64),
     MicEqParameter(i32),
+    RecoveryPartition(Vec<u8>),
     Status(DaemonStatus),
     Patch(Patch),
 }

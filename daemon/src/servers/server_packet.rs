@@ -73,6 +73,20 @@ pub async fn handle_packet(
             ))
         }
 
+        DaemonRequest::ReadRecoveryPartition(serial, partition, offset, length) => {
+            let (tx, rx) = oneshot::channel();
+            usb_tx
+                .send(DeviceCommand::ReadRecoveryPartition(
+                    serial, partition, offset, length, tx,
+                ))
+                .await
+                .map_err(|error| anyhow!(error.to_string()))?;
+            Ok(DaemonResponse::RecoveryPartition(
+                rx.await
+                    .context("Device task closed during recovery read")??,
+            ))
+        }
+
         DaemonRequest::RunFirmwareUpdate(serial, path, force) => {
             let (tx, rx) = oneshot::channel();
             usb_tx

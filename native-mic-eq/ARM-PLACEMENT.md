@@ -41,50 +41,62 @@ The effects ring is at 0x38DD4, backed by 0x3D79D–0x3DBA1, with capacity field
 
 Ring capacity is computed by 0x206C. Stock enqueue 0x20BC and dequeue 0x218C update indices. The ARM task at 0xA5B8 drains effects in three-byte units and passes them to 0x7A18. The later 0x7AC4 service exchanges SHI words. The task at 0xBCF8–0xBD50 services USB, effect receive/drain and SHI in sequence. USB registration also installs a separate USB service task, so serialization across task contexts still needs verification.
 
-The ten-byte query must be padded for the three-byte effects drain. Stock idle padding at VA 0x2F45F is FF FF FF. The DSP response emitter also pads individual one- and two-byte pieces with FF. Queueing a query through the effect ring should reserve the entire padded frame before publishing it. No hardware query has been queued.
+The ten-byte query must be padded for the three-byte effects drain. Stock idle padding at VA 0x2F45F is FF FF FF. The DSP response emitter also pads individual one- and two-byte pieces with FF. Queueing a query through the effect ring should reserve the entire padded frame before publishing it. The physical 908 readback test now queues these queries successfully; see the results below.
 
 0x10B6C increments the eCos scheduler-lock count at 0x393C0. Its balancing function is 0x10B84. The mutex wrappers 0x10F18 and 0x10F1C can schedule or block. The bridge instead masks IRQ/FIQ around its short state and ring operations and restores the caller's CPSR. It calls no scheduler or blocking function while masked. The tick wrapper at 0x10E80 reads a 64-bit count from a runtime object rooted at 0x3FA10. The bridge reads its low word while masked and uses unsigned subtraction for timeout wrap. The linked experiment uses 100 native ticks. Their physical duration and maximum IRQ-off latency remain unmeasured.
 
-## Loading and recovery limits
+## Physical Boot2 loading and recovery
 
-The flash-bank table at 0x38BDC names Code0, Code1, Preset0, Preset1, Golden, Config and Update. Their base and capacity fields are zero in the image and are filled at runtime. The updater calls 0x7C08 to obtain Update capacity before accepting the package length. A Golden name establishes a partition label. Entry into it without the normal application and its USB interface has yet to be demonstrated.
+Boot2 and Golden were retrieved through the original read-only DCP command `0x004005`, twice per 1,024-byte chunk. Host requests allow only Boot2 (partition 0, 65,536 bytes) and Golden (partition 2, 851,968 bytes). No flash erase/write command is used by the reader.
 
-The local image contains the ARM application, its preamble and DSP payload. The reused remote research at `chipid_reserved_heap_experiment_2026-11-18/`, `chipid_flash_reader_2026-11-18/` and `chipid_integrated_reset_2026-11-18/` contains heap-pressure and expanded-section experiments. Those reports explicitly retain the unknown Boot2 contiguous-load assumption. Their stock bank locator at 0x7F20 computes the DSP start from base + 48 + four times the ARM word count. This describes an application-side locator. A separately recovered Boot2 binary and its actual copy limit remain unavailable.
+Boot2 file offset 0x10 loads at VA 0x4F000. The ARM loader at 0x4F428 checks magic `20120710`, rejects ARM counts >=0x10000 words, copies from bank+0x30 into VA 0x200 in chunks <=0x800, and requires reflected CRC residue zero over the code including its appended checksum. It writes bank metadata at 0x4FFC0/0x4FFC4 and enters VA 0x200. Code1, Code0 and Golden bases are 0x1C0000, 0xF0000 and 0x20000. No CP15 instructions were found in the Boot2 executable span.
 
-The current lab builder reuses the early-copy approach. It appends a 1,164-byte reset stage and bridge to the ARM section, shifts the DSP header using the ARM word count, and redirects VA 0x314 through the reset stage. The stage copies the bridge to 0x4F000, clears its 24-byte state, lowers the heap ceiling to 0x4F000 and installs both hooks. It drains the ARM write buffer and invalidates the instruction cache. If the data-cache enable bit is set, it resumes the stock clear without installing the bridge or reducing the heap.
+The recovered button predicate is `(bitmap & 0x00900001) == 0x00900001`, matching FX preset 1, Megaphone and Mic Mute. Holding these across DC reconnection physically booted Golden firmware **1.3.31.83**. A subsequent normal DC power cycle physically returned to **1.5.1.907**, verified again immediately before the 908 update. The ROM UART fallback at 0x20000900 is code evidence only; physical UART recovery remains untested and no external programmer is available.
 
-The serialized image is 641,208 bytes with an intentionally invalid `GXLAB_NOT_FLASH!` product header. Its ARM checksum is `14EC692F` and outer CRC is `303E1849`. All edits reverse byte-for-byte to the supplied 907 image. These checksums identify the build using a 100-tick timeout. The image retains build 907 and does not reserve version 908.
+## Same-size 908 bootstrap
 
-The emulator loads only that serialized ARM section. It executes the reset stage, verifies the copied bridge and stock clear, executes the 24 stock USB registrations plus the new registration, and submits a query through the compiled dispatcher and effects-ring publisher. It feeds DSP reply words through the receive hook installed by reset, then verifies the host completion payload. The original heap constructor and allocator successfully make 48 allocations of 1 KiB before exhaustion while preserving every byte of the reserved region. This workload does not model the full application's live allocations. Separate cases exercise ring wrap, insufficient capacity, interleaved stock status words, tick wrap, timeout and data-cache fallback. The USB completion function is captured and the DSP reply words are supplied by the harness. Real Boot2 loading, SHI peripherals, heap high-water usage and physical cache behavior remain unverified.
+The earlier expanded-section .gxlab remains an offline experiment. The tested 908 candidate keeps the original ARM count 0xE897, DSP header at file 0x3A2B0 and total file size **640,044 bytes**.
 
-The official quick-start guide did not provide a recovery procedure in the retrieved material. The upstream firmware updater documentation describes host-driven updating. A separate physical recovery interface remains unverified.
+The entry at VA 0x244 temporarily branches into initialized data. File 0x394D0 (VA 0x3967C) holds the 976-byte bridge; file 0x39D8C (VA 0x39F38) holds the 368-byte reset helper. These are owned initialized-data spans whose original bytes are zero. The helper copies the bridge to 0x4F000 and itself to 0x4F400, clears the bridge's 24-byte BSS, then executes from the relocated copy. Before stock initialization it restores both source spans to their original zero bytes, reserves 0x4F000–0x50000 from the heap, installs the observer and registration hooks, and restores the original startup instruction at 0x244. It preserves registers/CPSR and performs data-cache line cleaning, write-buffer draining and instruction-cache invalidation around the copied code and runtime patches.
 
-The user confirmed that no external programmer or board service documentation is available. A Golden partition label and a backup file cannot establish an independent recovery route. Firmware 908 is pending that prerequisite.
+The builder checks sizes, input versions/checksums, source bytes and byte-exact reversal to the original 907 image. `.gxlab` has invalid updater magic; explicit `.bin` output preserves the GoXLR product header and uses build 908 in the outer, ARM and DSP headers.
 
-## Rust transport
+| Candidate identity | Value |
+| --- | --- |
+| SHA-256 | C8607989063552E5A412AD3B29B4E1DB355D9B737DCC59D972A5349FBFAA970F |
+| ARM CRC | 47E7728C |
+| Outer CRC | 92C9EA43 |
+| Original 907 SHA-256 | EEA92925A5D4EB0111943F72CE7BFEB0351E9390506FECA17AC6A0C3B8346C13 |
 
-The USB layer implements submit `0x00819000`, poll `0x00819001` and stock effect writes for all 36 raw fields. IPC accepts `ReadMicEqParameter(serial, band, field)` and returns `MicEqParameter(raw)`. `SetMicEqParameter` requires the active profile name and expected DSP value, validates the write before any USB request, reads the DSP before writing and checks the DSP response afterward. Bands are numbered 1–12. Fields are Frequency, Gain and Width. Width is the raw selector, and physical effective Q remains a separate measurement.
+Emulation executes the actual serialized bootstrap, original allocator through 48 allocations/exhaustion, stock USB registration plus the bridge, compiled query publication and supplied DSP replies. It tests queue wrap/pressure, IRQ restoration, tick wrap, timeout/resynchronization, both modeled cache-enable states and the recovered Boot2 loader's CRC/size/Golden selection paths. It does not emulate the complete physical peripherals or prove full stock functionality.
 
-The daemon routes these requests through the existing device worker and a bridge-specific hardware-validation gate. That gate remains false, independently of stock bandwidth support. The native client can call the typed IPC read method, while its extra controls remain gated. Profile persistence for the extended fields remains pending.
+## Physical 908 results
 
-## Physical test preparation
+The authorized updater completed upload, validation, hardware validation and flash writing. The device re-enumerated on **1.5.1.908**. A fresh rebuild produced the identical candidate hash before flashing.
 
-Once the serialized firmware passes placement and communication tests, capture all 36 raw fields through DSP readback before any write. Compare repeated snapshots and record the active mic profile. A profile XML value cannot establish the initial DSP width.
+All **36 parameters across bands 1–12** returned identical repeated live reads through USB submit `0x00819000`, the compiled ARM bridge, DSP query 0x47, DSP reply 0x22, poll `0x00819001`, the USB-owning daemon and HTTP API. Bands are numbered 1–12; fields are Frequency, Gain and Width. This is physical read-path evidence beyond an acknowledgment or emulator result. It establishes DSP parameter-table readback, not the audible filter response or the numerical effective Q.
 
-Reuse the fixed headphone-cup fixture and its 1 dB repeatability and 20 dB signal-to-quiet checks. Test one band and one field at a time. At nonzero gain, measure the center and tones on both sides before a width edit, after it, and after restoration. Frequency and gain checks retain the existing 2 dB gain-error and 1.5 dB acoustic-restoration bounds. Width checks must show a repeatable change at the side tones while the center and neighboring bands stay consistent.
+Boot2 and Golden were read again after flashing and match their pre-update hashes exactly:
 
-For each edit, require the requested raw value in the DSP response and the expected physical response. Restore the original raw value, reread all 36 fields, and remeasure the baseline. A timeout leaves the state unknown and requires readback resynchronization before further edits. Reconnect, profile reload and cold-start tests follow successful reversible field tests. The present firmware has no host-visible readback binding to execute this sequence.
+- Boot2: `523DB594FD19665C46B80865292B122CB67AE93A3910E4799E10A08733AB3921`
+- Golden: `841551DB242370C0098376BEA953F69249D3FA67790709D04CB9B940C054C11C`
 
-## Reproduce
+Initial acoustic attempts found no captured tone and stopped before EQ writes. After establishing a measurable fixture, all twelve bands passed reversible gain, frequency and width audio checks. Gain error was at most 0.24 dB for the requested +/-6 dB changes; maximum restoration deviation was 0.98 dB. See [the per-band physical results](FIRMWARE-908.md), including excluded failed attempts and the exact tested widths. Firmware 908 remains experimental. Booting and repeated reads exercise placement/cache handling but do not measure worst-case heap use, IRQ latency, physical timeout recovery or long-run stability.
 
-From the repository root, compile the layout audit with `rustc --edition 2024 tools/audit_goxlr_arm_layout.rs -o audit-goxlr-arm-layout.exe`, then run it with the stock or 907 image as its argument.
+## Rust transport, persistence and application
 
-For the optimized object, compile the bridge using `arm-none-eabi-gcc -march=armv5te -mthumb -mthumb-interwork -Oz -fno-jump-tables -ffreestanding -fno-builtin -Wall -Wextra -Werror -DGOXLR_EQ_FIRMWARE -c tools/goxlr_eq_readback_bridge.c -o eq-bridge.o`. Assemble the existing hooks in ARM mode, link with `arm-none-eabi-ld -r`, and inspect sizes and undefined symbols.
+`ReadMicEqParameter` returns typed live values. `SetMicEqParameter` validates the field/range, requires the active profile name and expected DSP value, checks the current DSP value before writing and checks DSP readback afterward. Raw gain permits -12..12 for exact restoration; legacy stock setters retain their existing limits.
 
-Run the C host checks with both `GOXLR_EQ_BRIDGE_TEST` and `GOXLR_EQ_FIRMWARE` defined. Run `cargo test --locked -p goxlr-usb` for all Rust USB tests.
+Mic profiles persist all 36 optional native overrides in `GOXLR_UTILITY_MIC_EQ_NATIVE`. Legacy edits clear the affected override. XML save/load tests cover all fields and invalid inputs. Native replay is enabled only on the physically tested 908 bridge; it pre-reads targets and attempts to restore all native edits on failure before verifying them. Legacy profiles flatten extra-stage gains while preserving their frequency and width. The native app reads and controls all twelve bands on 908 with expected-value guarded writes and DSP confirmation. No numerical Q claim is made from a raw Width selector.
 
-Build the linked experiment with `bash tools/build_goxlr_eq_bridge.sh <ARM-bin-directory> <build-directory> 100`. The third argument is an explicit native-tick timeout. Compile `tools/build_goxlr_eq_lab.rs` using `rustc --edition 2024`, then run it with the untouched 907 image, generated `eq-stage.bin` and a new `.gxlab` output path. The builder refuses to overwrite an existing output.
+The isolated IPC simulation covers 36 replies, timeout errors and malformed replies. It is transport testing, distinct from the physical device reads above.
 
-The ARM verification harness reuses the existing Unicorn 2.1 Python binding. Run `python tools/verify_goxlr_eq_arm.py <907-image> <eq-bridge.elf> --lab <image.gxlab>`. It performs no hardware I/O.
+## Reproduce and complete validation
 
-Firmware 908 has not been emitted. Hardware validation, independent recovery and physical tests remain pending.
+Build with `bash tools/build_goxlr_eq_bridge.sh <ARM-bin-directory> <build-directory> 100`. Compile the builder with `rustc --edition 2024 tools/build_goxlr_eq_lab.rs -o <builder.exe>`. Pass `<907.bin> <eq-bridge.bin> <eq-same-size-stage.bin> <new-output.bin>` to reproduce the candidate; existing output files are refused.
+
+Run `python tools/verify_goxlr_eq_arm.py <907.bin> <eq-bridge.elf> --same-size <908.bin> --boot2 <boot2.bin> --golden <golden.bin>`. This requires the existing Unicorn binding and performs no hardware I/O. Run `cargo test --locked -p goxlr-usb -p goxlr-profile-loader -p goxlr-native-mic-eq` for Rust checks; the legacy live 907 test remains ignored unless explicitly selected.
+
+`tools/Read-GoXLRRecovery.ps1` backs up saved profiles, saves live settings, temporarily starts the research daemon and always restores the original daemon and saved files. Select recovery reads, `-Firmware`, or `-ValidationScript tools/Test-GoXLRNativeEq.ps1`. Validation records repeated DSP reads and applies no test changes unless the fixed headphone-cup fixture passes 1 dB repeatability and 20 dB signal-to-quiet checks. It records each measurement, restores changed fields and rechecks all 36 parameters after each band. Acoustic restoration must be within 1.5 dB; gain response within 2 dB of the requested change. Frequency and width require observable differences at center/side tones.
+
+All twelve bands have completed the reversible physical field tests. Remaining checks are tracked in the physical report: native profile reload and app round trips, cold start, numerical effective-Q calibration, measured live memory/timing limits and sustained use. Preserve 907 and Golden throughout.

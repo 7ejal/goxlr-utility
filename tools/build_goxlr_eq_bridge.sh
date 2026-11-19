@@ -47,4 +47,11 @@ registration_branch=$((0xea000000 | (((registration - 0xb328 - 8) >> 2) & 0xffff
         --defsym="registration_branch=$registration_branch" \
         -Ttext=0x3a458 -e stage_reset eq-stage.o -o eq-stage.elf
     "$toolchain_dir/arm-none-eabi-objcopy" -O binary -j .text eq-stage.elf eq-stage.bin
+    "$toolchain_dir/arm-none-eabi-gcc" "${common[@]}" -marm \
+        -c "$source_dir/goxlr_eq_same_size_reset.S" -o eq-same-size-stage.o
+    "$toolchain_dir/arm-none-eabi-ld" --just-symbols=eq-bridge.elf \
+        --defsym="observer_branch=$observer_branch" \
+        --defsym="registration_branch=$registration_branch" \
+        -Ttext=0x4f400 -e same_size_stage eq-same-size-stage.o -o eq-same-size-stage.elf
+    "$toolchain_dir/arm-none-eabi-objcopy" -O binary -j .text eq-same-size-stage.elf eq-same-size-stage.bin
 )
