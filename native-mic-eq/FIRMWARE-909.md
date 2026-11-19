@@ -1,4 +1,4 @@
-# 909 dynamics bridge — prepared, physical validation pending
+# 909 dynamics bridge — live controls validated, processing pending
 
 ## Physical 909 update and 47-field validation — 2026-11-19
 

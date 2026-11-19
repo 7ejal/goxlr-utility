@@ -1,7 +1,7 @@
 {
   "build": 909,
   "revision": "dynamics-readback-whitelist-r1",
-  "stage": "serialized experimental image; offline ARM/Boot2/allowlist tests passed; physical validation pending",
+  "stage": "physical 909 update and all 47 live write/read/restoration checks passed; calibrated processing and headphone isolation pending",
   "sha256": "74555b3667dcb7150930ae544bdfcf732febf7bb6a0aa9b7cfd9b513ffa3c74b",
   "arm_crc": "D7F16D2B",
   "outer_crc": "791AE153",
