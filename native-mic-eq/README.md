@@ -48,7 +48,8 @@ Native writes use expected-value checks and DSP readback confirmation. The
 12-band controls and automatic profile replay are enabled only on 908, after
 all twelve bands passed physical audio checks. Microphone profiles retain all
 36 optional native overrides. The original 907 frequency/gain behavior remains
-available. See [the measured results](FIRMWARE-908.md) for exact tested changes
+available. On 908, Save and Save As capture the complete live 36-field DSP
+snapshot, including untouched fields. See [the measured results](FIRMWARE-908.md) for exact tested changes
 and the remaining experimental limits.
 
 Older profile width attributes remain profile-only. They were never proof of

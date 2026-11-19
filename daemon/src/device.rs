@@ -2927,6 +2927,7 @@ impl<'a> Device<'a> {
                 }
             }
             GoXLRCommand::SaveMicProfile() => {
+                self.capture_native_mic_eq_profile().await?;
                 let mic_profile_directory = self.settings.get_mic_profile_directory().await;
                 self.mic_profile.save(&mic_profile_directory, true)?;
             }
@@ -2934,6 +2935,7 @@ impl<'a> Device<'a> {
                 let path = self.settings.get_mic_profile_directory().await;
                 MicProfileAdapter::can_create_new_file(name.clone(), &path)?;
 
+                self.capture_native_mic_eq_profile().await?;
                 self.mic_profile.save_as(name.clone(), &path, false)?;
 
                 // Save the new name in the settings
@@ -4004,6 +4006,24 @@ impl<'a> Device<'a> {
 
         if self.device_supports_native_eq_profile() {
             self.apply_native_mic_eq_profile().await?;
+        }
+        Ok(())
+    }
+
+    async fn capture_native_mic_eq_profile(&mut self) -> Result<()> {
+        if !self.device_supports_native_eq_profile() {
+            return Ok(());
+        }
+        let mut snapshot = Vec::with_capacity(36);
+        for band in 1..=12 {
+            use goxlr_types::MicEqField::{Frequency, Gain, Width};
+            for field in [Frequency, Gain, Width] {
+                snapshot.push((band, field, self.read_mic_eq_parameter(band, field).await?));
+            }
+        }
+        // A failed read leaves both the in-memory profile and the saved file unchanged.
+        for (band, field, raw) in snapshot {
+            self.mic_profile.set_native_eq_parameter(band, field, raw)?;
         }
         Ok(())
     }

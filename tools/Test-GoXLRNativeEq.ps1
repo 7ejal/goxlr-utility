@@ -80,11 +80,19 @@ if ($ProfileRoundTrip) {
         $reply = Send-Request @{ Command = @($device, @{ SaveMicProfile = @() }) }
         if ($reply -ne 'Ok') { throw 'Saving the native profile failed.' }
         Set-Parameter 6 Width $width
+        $untouched = ($baseline | Where-Object { $_.Band -eq 5 -and $_.Field -eq 'Width' }).Raw
+        Set-Parameter 5 Width $(if ($untouched -eq 0) { 16 } else { 0 })
         $reply = Send-Request @{ Command = @($device, @{ LoadMicProfile = @($profileName, $false) }) }
         if ($reply -ne 'Ok' -or (Read-Parameter 6 Width) -ne $testWidth) {
             throw 'Reloading the saved profile did not apply its native width.'
         }
-        'Native width survived profile save and was reapplied by profile reload.'
+        foreach ($item in $baseline) {
+            $expected = if ($item.Band -eq 6 -and $item.Field -eq 'Width') { $testWidth } else { $item.Raw }
+            if ((Read-Parameter $item.Band $item.Field) -ne $expected) {
+                throw 'Profile reload did not restore the complete saved DSP snapshot.'
+            }
+        }
+        'Profile reload restored all 36 saved DSP values, including an untouched band.'
     } finally {
         foreach ($item in $baseline) { Set-Parameter $item.Band $item.Field $item.Raw }
         foreach ($item in $baseline) {

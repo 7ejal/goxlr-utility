@@ -69,7 +69,10 @@ cause of the earlier silence was not conclusively isolated.
 A normal DC power cycle after flashing returned to 908 with zero changes in
 the 36-field baseline. The native application's real IPC frequency, gain and
 width round trips passed, restoring the complete baseline after each edit.
-A native width survived profile save and was reapplied by profile reload.
+Save and Save As capture all 36 live DSP values before writing a microphone
+profile. A physical reload check restored all 36 saved values, including an
+untouched band deliberately changed after the save. Failed reads leave the
+in-memory profile and saved file unchanged.
 
 The installed-state comparison also caught a migration defect: legacy width
 metadata that had previously been profile-only was replayed at startup. The
@@ -84,11 +87,13 @@ frequency, gain and raw-width controls in the installed native app.
 
 Installed executable SHA-256 values:
 
-- Daemon: `EF749D8E82CE2FFA15D0273BC624FE13A931D83A56FA001F94AE19F7DADAB3C0`
+- Daemon: `DC7EB839C5C91497ECB5108FDB1725EEC7FC879AA6CF245E38986CE2E219B319`
 - Native app: `C599D0993A7874592FDE3571F0120774AA7EB35A2BA0CEB063D846650C0BCEAD`
 
 Original executables remain backed up. The existing native-app shortcut opens
 the updated application; no additional preview application was created.
+After the final installation, all 36 DSP values and both original saved-profile
+hashes still matched. A fixture-only microphone check repeated within 0.29 dB.
 
 This is one physical device and one microphone fixture. Worst-case live heap
 use, IRQ-off latency, native-tick duration, deliberately induced physical

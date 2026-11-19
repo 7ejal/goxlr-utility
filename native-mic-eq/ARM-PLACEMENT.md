@@ -91,6 +91,8 @@ Mic profiles persist all 36 optional native overrides in `GOXLR_UTILITY_MIC_EQ_N
 
 The isolated IPC simulation covers 36 replies, timeout errors and malformed replies. It is transport testing, distinct from the physical device reads above.
 
+On 908, Save and Save As read all 36 fields before updating the microphone profile. A read failure aborts before changing either the in-memory profile or its file. The physical reload test verified the complete saved snapshot, including a previously untouched band changed after saving.
+
 ## Reproduce and complete validation
 
 Build with `bash tools/build_goxlr_eq_bridge.sh <ARM-bin-directory> <build-directory> 100`. Compile the builder with `rustc --edition 2024 tools/build_goxlr_eq_lab.rs -o <builder.exe>`. Pass `<907.bin> <eq-bridge.bin> <eq-same-size-stage.bin> <new-output.bin>` to reproduce the candidate; existing output files are refused.
