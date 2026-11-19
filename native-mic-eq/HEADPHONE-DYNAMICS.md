@@ -7,9 +7,13 @@ controls were changed or installed. PR #3 remains draft.
 ## Current physical baseline
 
 DESKTOP-MOR85DD reports full-size firmware 1.5.1.908, DICE 1.5.1.901 and FPGA 7.
-All 36 microphone EQ fields returned identical repeated DSP reads and match the
-last installed-state baseline. Both previously backed-up saved profiles retain
-their recorded hashes. The installed daemon and native app match the hashes in
+Initially all 36 microphone EQ fields returned identical repeated DSP reads and
+matched the last installed-state baseline. A final repeated snapshot was stable
+but found band 11 gain changed from 0 to +1 dB and band 12 from 0 to +9 dB;
+the other 34 fields still match. This task issued no EQ writes; the source of
+those concurrent changes was not established and their current values were left
+untouched. Both previously backed-up saved profiles retain their recorded
+hashes. The installed daemon and native app match the hashes in
 [FIRMWARE-908.md](FIRMWARE-908.md). Windows reports the GoXLR audio devices healthy.
 These checks do not remeasure sound or prove long-term stability.
 
