@@ -1,5 +1,40 @@
 # 909 dynamics bridge — prepared, physical validation pending
 
+## Physical 909 update and 47-field validation — 2026-11-19
+
+The user ran the exact-image updater and typed 909. The recorded phases reached
+HardwareValidate, HardwareWrite and Complete; independent live status reports
+1.5.1.909. All 36 microphone EQ values matched the pre-update snapshot after
+reconnect. No cold power-cycle or induced recovery failure was tested.
+
+The actual native `native_all_parameters_reversible_round_trip` passed all 47
+individual field checks in 187.73 seconds: 36 EQ and 11 dynamics fields. Each
+changed by one valid step, read back through the physical bridge and restored
+the complete 47-field snapshot before proceeding. A separate final verification
+read every field twice; all matched their baselines. This validates live control
+and restoration, not the complete range or calibrated processing response.
+
+Fresh post-update Boot2/Golden captures were read twice per chunk and match:
+
+- Boot2: `523db594fd19665c46b80865292b122cb67ae93a3910e4799e10a08733ab3921`
+- Golden: `841551db242370c0098376bea953f69249d3fa67790709d04cb9b940c054c11c`
+
+All 95 pre-update backup files still verify. Private evidence is in
+`physical-909-user-test-17978`: complete transcript, before/after snapshots,
+independent-final-47.json, recovery captures and verification-summary.json.
+Windows PowerShell initially delayed transcription of native stdout until the
+test ended; all 47 PASS lines and the successful exit are now in the transcript.
+Future runs additionally retain a dedicated native-all-parameters.log.
+
+Settings exception outside these 47 fields: cached noise gate threshold was
+-40 dB before the update and -52 dB afterward. Both preserved original/live
+profiles specify -40. The user has been asked whether this was intentional;
+no gate write was issued and cause is not established. Chat volume also differs
+from the original snapshot during subsequent checks and was left untouched.
+Do not claim all microphone/mixer settings unchanged until these are resolved.
+GUI dynamics editing remains disabled pending processing validation. Physical
+headphone DAC isolation and live DSP utilization/free-memory remain unmeasured.
+
 ## Authorized user-controlled update preparation
 
 On 2026-11-19 the user authorized the exact SHA256 below for a user-controlled

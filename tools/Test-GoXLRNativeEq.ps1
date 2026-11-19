@@ -68,7 +68,8 @@ if ($NativeTestRunner) {
             $dynamics += [pscustomobject]@{ Control = $control; Raw = $first }
         }
         $dynamics | ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'dynamics-baseline.json')
-        & $NativeTestRunner 'daemon::tests::native_all_parameters_reversible_round_trip' --exact --ignored --nocapture
+        & $NativeTestRunner 'daemon::tests::native_all_parameters_reversible_round_trip' --exact --ignored --nocapture |
+            Tee-Object -FilePath (Join-Path $OutputDirectory 'native-all-parameters.log')
         if ($LASTEXITCODE) { throw '47-field validation or restoration failed; stop further edits.' }
         foreach ($item in $dynamics) {
             if ((Send-Request @{ ReadDynamicsParameter = @($device, $item.Control) }).DynamicsParameter -ne $item.Raw) {
