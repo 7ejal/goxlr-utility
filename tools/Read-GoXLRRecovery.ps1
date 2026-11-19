@@ -59,7 +59,7 @@ if ($Firmware) {
         throw 'Expected an exact recorded 908 or 909 same-size image.'
     }
     if ($build -eq 909) {
-        $manifest = Get-Content -Raw (Join-Path $PSScriptRoot '../native-mic-eq/BUILD-909.json') | ConvertFrom-Json
+        $manifest = Get-Content -Encoding UTF8 -Raw (Join-Path $PSScriptRoot '../native-mic-eq/BUILD-909.json') | ConvertFrom-Json
         if ((Get-FileHash $OriginalDaemon).Hash -ne $manifest.windows_daemon_sha256 -or
             (Get-FileHash $ResearchDaemon).Hash -ne $manifest.windows_daemon_sha256) {
             throw 'Install the recorded 909-compatible daemon before this update; the older daemon cannot preserve native EQ replay on 909.'

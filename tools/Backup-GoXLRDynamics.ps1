@@ -52,8 +52,8 @@ $config = Join-Path (Split-Path (Split-Path $status.paths.profile_directory)) 'c
 if (Test-Path -LiteralPath $config) {
     Copy-Item -LiteralPath $config -Destination (Join-Path $backup 'config') -Recurse
 }
-$status | ConvertTo-Json -Depth 100 | Set-Content (Join-Path $backup 'status-before.json')
-$baseline | ConvertTo-Json | Set-Content (Join-Path $backup 'dsp-baseline-36.json')
+$status | ConvertTo-Json -Depth 100 | Set-Content -Encoding UTF8 (Join-Path $backup 'status-before.json')
+$baseline | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $backup 'dsp-baseline-36.json')
 $active = @(
     @{ Source = Join-Path $status.paths.profile_directory ($mixer.profile_name + '.goxlr'); Backup = 'original-mixer.goxlr' },
     @{ Source = Join-Path $status.paths.mic_profile_directory ($mixer.mic_profile_name + '.goxlrMicProfile'); Backup = 'original-mic.goxlrMicProfile' }
@@ -63,7 +63,7 @@ foreach ($file in $active) {
     Copy-Item -LiteralPath $file.Source -Destination $file.Copy
     $file.Hash = (Get-FileHash $file.Copy).Hash
 }
-$active | ConvertTo-Json | Set-Content (Join-Path $backup 'original-active-profiles.json')
+$active | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $backup 'original-active-profiles.json')
 try {
     foreach ($command in 'SaveProfile', 'SaveMicProfile') {
         $operation = @{}; $operation[$command] = @()
@@ -81,5 +81,5 @@ try {
 }
 Get-ChildItem -LiteralPath $backup -File -Recurse | ForEach-Object {
     [pscustomobject]@{ Path = $_.FullName.Substring($backup.Length + 1); SHA256 = (Get-FileHash $_.FullName).Hash }
-} | ConvertTo-Json | Set-Content (Join-Path $backup 'SHA256.json')
+} | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $backup 'SHA256.json')
 'Backed up 908 image, installed executables, all profiles and 36 live values; live profiles saved for restart.'

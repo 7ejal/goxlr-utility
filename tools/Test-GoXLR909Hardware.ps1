@@ -22,14 +22,14 @@ function Check-Microphone($reference, $actual) {
 $BackupDirectory = (Resolve-Path -LiteralPath $BackupDirectory).Path
 $NativeTestRunner = (Resolve-Path -LiteralPath $NativeTestRunner).Path
 $RecoveryReader = (Resolve-Path -LiteralPath $RecoveryReader).Path
-$manifest = Get-Content -Raw (Join-Path $PSScriptRoot '../native-mic-eq/BUILD-909.json') | ConvertFrom-Json
+$manifest = Get-Content -Encoding UTF8 -Raw (Join-Path $PSScriptRoot '../native-mic-eq/BUILD-909.json') | ConvertFrom-Json
 $firmware = Join-Path $BackupDirectory 'firmware-909.bin'
 if ((Get-FileHash $firmware).Hash -ne $manifest.sha256 -or
     (Get-FileHash $InstalledDaemon).Hash -ne $manifest.windows_daemon_sha256 -or
     (Get-FileHash $NativeTestRunner).Hash -ne $manifest.native_47_field_test_sha256) {
     throw 'The authorized firmware, installed daemon or native test runner hash differs.'
 }
-$hashes = Get-Content -Raw (Join-Path $BackupDirectory 'SHA256.json') | ConvertFrom-Json
+$hashes = Get-Content -Encoding UTF8 -Raw (Join-Path $BackupDirectory 'SHA256.json') | ConvertFrom-Json
 foreach ($file in $hashes) {
     if ((Get-FileHash -LiteralPath (Join-Path $BackupDirectory $file.Path)).Hash -ne $file.SHA256) {
         throw 'A backup file hash differs.'
@@ -55,10 +55,10 @@ try {
     $device = @($status.mixers.PSObject.Properties)
     $version = $device[0].Value.hardware.versions.firmware -join '.'
     if ($version -notin @('1.5.1.908', '1.5.1.909')) { throw 'Expected 908 or the approved 909; stop on fallback.' }
-    $reference = Get-Content -Raw (Join-Path $BackupDirectory 'dsp-baseline-36.json') | ConvertFrom-Json
+    $reference = Get-Content -Encoding UTF8 -Raw (Join-Path $BackupDirectory 'dsp-baseline-36.json') | ConvertFrom-Json
     $before = (New-Item -ItemType Directory -Path (Join-Path $output 'before')).FullName
     & (Join-Path $PSScriptRoot 'Test-GoXLRNativeEq.ps1') -OutputDirectory $before -ReadOnly
-    Check-Microphone $reference (Get-Content -Raw (Join-Path $before 'dsp-baseline.json') | ConvertFrom-Json)
+    Check-Microphone $reference (Get-Content -Encoding UTF8 -Raw (Join-Path $before 'dsp-baseline.json') | ConvertFrom-Json)
     if ($version -eq '1.5.1.908') {
         Write-Host "Exact authorized 909 SHA256: $($manifest.sha256)"
         if ((Read-Host 'Type 909 to start your firmware update, or anything else to cancel') -cne '909') {
@@ -69,7 +69,7 @@ try {
     }
     $after = (New-Item -ItemType Directory -Path (Join-Path $output 'after')).FullName
     & (Join-Path $PSScriptRoot 'Test-GoXLRNativeEq.ps1') -OutputDirectory $after -ReadOnly
-    Check-Microphone $reference (Get-Content -Raw (Join-Path $after 'dsp-baseline.json') | ConvertFrom-Json)
+    Check-Microphone $reference (Get-Content -Encoding UTF8 -Raw (Join-Path $after 'dsp-baseline.json') | ConvertFrom-Json)
     & (Join-Path $PSScriptRoot 'Test-GoXLRNativeEq.ps1') -OutputDirectory $after -ReadOnly `
         -NativeTestRunner $NativeTestRunner -AllParametersRoundTrip
     $status = Status
@@ -79,7 +79,7 @@ try {
     }
     'PASS all 47 physical parameter write/read/restore checks. Acoustic processing and headphone DAC isolation are separate tests.'
 } finally {
-    $profiles = Get-Content -Raw (Join-Path $BackupDirectory 'original-active-profiles.json') | ConvertFrom-Json
+    $profiles = Get-Content -Encoding UTF8 -Raw (Join-Path $BackupDirectory 'original-active-profiles.json') | ConvertFrom-Json
     foreach ($file in $profiles) {
         # Keep the pre-update live settings persistent; original saved files remain in the backup.
         $liveName = 'live-' + $file.Backup
