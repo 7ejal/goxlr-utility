@@ -51,6 +51,10 @@ all twelve bands passed physical audio checks. Microphone profiles retain all
 available. See [the measured results](FIRMWARE-908.md) for exact tested changes
 and the remaining experimental limits.
 
+Older profile width attributes remain profile-only. They were never proof of
+active DSP width and are not replayed automatically. An explicit native edit
+creates the override that enables its subsequent profile replay.
+
 See [ARM placement and hardware evidence](ARM-PLACEMENT.md) for the exact image,
 recovery results and outstanding gates. Use `tools/Read-GoXLRRecovery.ps1` with
 `-ValidationScript tools/Test-GoXLRNativeEq.ps1` to preserve profiles and the

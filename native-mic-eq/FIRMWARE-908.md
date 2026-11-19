@@ -66,6 +66,18 @@ cause of the earlier silence was not conclusively isolated.
 
 ## Remaining experimental limits
 
+A normal DC power cycle after flashing returned to 908 with zero changes in
+the 36-field baseline. The native application's real IPC frequency, gain and
+width round trips passed, restoring the complete baseline after each edit.
+A native width survived profile save and was reapplied by profile reload.
+
+The installed-state comparison also caught a migration defect: legacy width
+metadata that had previously been profile-only was replayed at startup. The
+original live widths were restored. Replay now uses only explicit native
+overrides, with a regression test covering legacy widths and a native edit's
+save/load behavior. Final installed-state verification follows administrator
+approval for the corrected build.
+
 This is one physical device and one microphone fixture. Worst-case live heap
 use, IRQ-off latency, native-tick duration, deliberately induced physical
 timeouts and long-run stability are unmeasured. Emulator timeout/recovery

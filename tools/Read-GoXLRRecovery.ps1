@@ -78,8 +78,8 @@ try {
         if ($reply -ne 'Ok') { throw "Could not save live settings. $reply" }
     }
     $null = Request @{ Daemon = 'StopDaemon' }
-    Wait-Process -Id $running[0].Id -Timeout 15
     $switched = $true
+    if (!$running[0].WaitForExit(15000)) { throw 'The original daemon did not exit.' }
     $research = Start-Process -FilePath $ResearchDaemon -ArgumentList @('--disable-tray', 'true') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $output 'research-daemon.log') -RedirectStandardError (Join-Path $output 'research-daemon.err')
     $null = Wait-Status
     if ($ValidationScript) {

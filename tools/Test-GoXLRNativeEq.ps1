@@ -90,6 +90,8 @@ if ($ProfileRoundTrip) {
         foreach ($item in $baseline) {
             if ((Read-Parameter $item.Band $item.Field) -ne $item.Raw) { throw 'Profile-test DSP restoration failed.' }
         }
+        $reply = Send-Request @{ Command = @($device, @{ SaveMicProfile = @() }) }
+        if ($reply -ne 'Ok') { throw 'Saving the restored live profile failed.' }
     }
 }
 if ($ReadOnly) { return }

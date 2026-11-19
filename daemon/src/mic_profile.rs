@@ -26,6 +26,27 @@ static GATE_ATTENUATION: [i8; 26] = [
     -26, -27, -28, -30, -32, -61,
 ];
 
+#[cfg(test)]
+mod native_profile_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_widths_stay_profile_only_until_an_explicit_native_edit() -> Result<()> {
+        let xml = b"<MicProfileTree><dspTreeMicProfile GOXLR_UTILITY_MIC_EQ_BANDWIDTH=\"0,0,0,0,0,0,0,0,0,0\"/></MicProfileTree>";
+        let mut profile = MicProfileAdapter::from_reader("fixture".into(), Cursor::new(xml))?;
+        for band in 0..12 {
+            assert_eq!(profile.native_eq_parameters()[band * 3 + 2], None);
+        }
+        profile.set_native_eq_parameter(6, goxlr_types::MicEqField::Width, 16)?;
+        let mut saved = Vec::new();
+        profile.profile.write_to(&mut saved)?;
+        let loaded = MicProfileAdapter::from_reader("fixture".into(), Cursor::new(saved))?;
+        assert_eq!(loaded.native_eq_parameters()[17], Some(16));
+        assert_eq!(loaded.native_eq_parameters()[14], None);
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct MicProfileAdapter {
     name: String,
@@ -210,9 +231,7 @@ impl MicProfileAdapter {
 
     pub fn native_eq_parameters(&self) -> [Option<i32>; 36] {
         let mut values = *self.profile.equalizer().native_parameters();
-        for band in 0..10 {
-            values[band * 3 + 2] = Some(i32::from(self.profile.equalizer().bandwidth()[band]));
-        }
+        // Legacy width attributes were profile-only; only explicit native edits may replay them.
         // Legacy profiles flatten extra stages without inventing frequency or width values.
         for index in [31, 34] {
             values[index].get_or_insert(0);
