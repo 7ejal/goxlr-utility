@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$Endpoint = 'http://127.0.0.1:14564/api/command',
+    [string]$Playback = 'Voicemeeter AUX Input',
     [switch]$ReadOnly,
     [string]$NativeTestRunner,
     [switch]$NativeWriteRoundTrip,
@@ -80,7 +81,7 @@ if ($NativeTestRunner) {
 }
 if ($ReadOnly -and !$ProfileRoundTrip) { return }
 $amplitude = $ToneAmplitude
-. (Join-Path $PSScriptRoot 'Test-GoXLRMicAudio.ps1') -LibraryOnly
+. (Join-Path $PSScriptRoot 'Test-GoXLRMicAudio.ps1') -LibraryOnly -Playback $Playback
 function Set-Parameter($band, $field, $raw) {
     $live = (Send-Request 'GetStatus').Status.mixers.$device
     if ($live.mic_profile_name -ne $profileName) { throw 'The active microphone profile changed.' }
@@ -147,7 +148,7 @@ foreach ($band in $Bands) {
     $captureDuration = '2.65'
     $sampleCount = 96000
     $quiet = @(Measure-Tones)
-    $tone = [MicFixture]::Start('Game (TC-HELICON GoXLR)', $amplitude)
+    $tone = [MicFixture]::Start($Playback, $amplitude)
     $record = [ordered]@{ Band = $band; Hz = $hz; Quiet = $quiet; Original = $original; Passed = $false }
     try {
         Start-Sleep -Milliseconds 1200

@@ -84,6 +84,19 @@ public static class MicFixture {
         }
     }
     public static double[] Levels(byte[] pcm, int count) { return Levels(pcm, count, 1, 0); }
+    public static double[] SignalStats(byte[] pcm, int channels, int channel) {
+        if (channels < 1 || channel < 0 || channel >= channels || pcm.Length % (4*channels) != 0)
+            throw new Exception("Invalid PCM channel layout");
+        double peak=0, sum=0; int clipped=0, frames=pcm.Length/(4*channels);
+        for (int i=0; i<frames; i++) {
+            double value=BitConverter.ToSingle(pcm,(i*channels+channel)*4);
+            if (Double.IsNaN(value) || Double.IsInfinity(value)) throw new Exception("Invalid PCM sample");
+            peak=Math.Max(peak,Math.Abs(value)); sum+=value*value;
+            if (Math.Abs(value)>=1) clipped++;
+        }
+        return new double[] {20*Math.Log10(Math.Max(1e-12,peak)),
+            20*Math.Log10(Math.Max(1e-12,Math.Sqrt(sum/Math.Max(1,frames)))),clipped,frames};
+    }
     public static double[] Levels(byte[] pcm, int count, int channels, int channel) {
         const int start=24000;
         if (channel < 0 || channel >= channels || pcm.Length < (start+count)*4*channels) throw new Exception("Capture too short or invalid channel");
@@ -103,7 +116,7 @@ public static class MicFixture {
 }
 "@
 
-function Measure-Tones([int]$Channel = 0) {
+function Measure-Tones([int]$Channel = 0, [string]$PcmPath = '') {
     $path = [IO.Path]::GetTempFileName()
     try {
         $captureProcess = [Diagnostics.ProcessStartInfo]::new($ffmpeg)
@@ -123,6 +136,7 @@ function Measure-Tones([int]$Channel = 0) {
         } finally {
             $process.Dispose()
         }
+        if ($PcmPath) { [IO.File]::Copy($path, $PcmPath, $false) }
         [MicFixture]::Levels([IO.File]::ReadAllBytes($path), $sampleCount, $CaptureChannels, $Channel)
     } finally {
         Remove-Item -LiteralPath $path

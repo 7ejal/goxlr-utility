@@ -7,6 +7,7 @@ param(
     [string]$InstalledDaemon = 'C:/Program Files/GoXLR Utility/goxlr-daemon.exe',
     [string]$Endpoint = 'http://127.0.0.1:14564/api/command',
     [switch]$NoRestart,
+    [switch]$ApplicationOnly,
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -19,7 +20,7 @@ $destination = Join-Path (Resolve-Path -LiteralPath $ApplicationDirectory).Path 
 if (!(Test-Path -LiteralPath $destination)) { throw 'The existing native app was not found.' }
 $running = @(Get-Process goxlr-daemon | Where-Object Path -eq $InstalledDaemon)
 if ($running.Count -ne 1 -or @(Get-Process goxlr-daemon).Count -ne 1) { throw 'Expected only the original daemon.' }
-if ($DryRun) { 'Would back up and replace both executables; elevated installs leave restart to the normal user.'; return }
+if ($DryRun) { "Would back up executables and install application (application-only: $ApplicationOnly); elevated installs leave restart to the normal user."; return }
 if (Test-Path -LiteralPath $BackupDirectory) { throw 'Choose a new backup directory.' }
 $backup = (New-Item -ItemType Directory -Path $BackupDirectory).FullName
 $originalDaemon = Join-Path $backup 'goxlr-daemon.exe'
@@ -37,17 +38,19 @@ foreach ($app in @(Get-Process GoXLR-Native-Mic-EQ -ErrorAction SilentlyContinue
 $stopped = $false
 $installed = $false
 try {
-    $reply = Invoke-RestMethod $Endpoint -Method Post -ContentType application/json -Body '{"Daemon":"StopDaemon"}'
-    if ($reply -ne 'Ok') { throw 'Could not stop the original daemon.' }
-    $stopped = $true
-    if (!$running[0].WaitForExit(15000)) { throw 'The original daemon did not exit.' }
-    Copy-Item -LiteralPath $Daemon -Destination $InstalledDaemon -Force
+    if (!$ApplicationOnly) {
+        $reply = Invoke-RestMethod $Endpoint -Method Post -ContentType application/json -Body '{"Daemon":"StopDaemon"}'
+        if ($reply -ne 'Ok') { throw 'Could not stop the original daemon.' }
+        $stopped = $true
+        if (!$running[0].WaitForExit(15000)) { throw 'The original daemon did not exit.' }
+        Copy-Item -LiteralPath $Daemon -Destination $InstalledDaemon -Force
+    }
     Copy-Item -LiteralPath $Application -Destination $destination -Force
-    if ((Get-FileHash $InstalledDaemon).Hash -ne (Get-FileHash $Daemon).Hash -or
+    if ((!$ApplicationOnly -and (Get-FileHash $InstalledDaemon).Hash -ne (Get-FileHash $Daemon).Hash) -or
         (Get-FileHash $destination).Hash -ne (Get-FileHash $Application).Hash) { throw 'Installed executable hash mismatch.' }
     $installed = $true
 } finally {
-    if ($stopped) {
+    if ($stopped -or $ApplicationOnly) {
         try {
             if (!$installed) {
                 if ((Get-FileHash $InstalledDaemon).Hash -ne (Get-FileHash $originalDaemon).Hash) {
@@ -60,10 +63,10 @@ try {
         } finally {
             # An elevated caller must let the normal user restart these IPC peers.
             if (!$NoRestart) {
-                Start-Process -FilePath $InstalledDaemon -WindowStyle Hidden | Out-Null
+                if ($stopped) { Start-Process -FilePath $InstalledDaemon -WindowStyle Hidden | Out-Null }
                 Start-Process -FilePath $destination | Out-Null
             }
         }
     }
 }
-'Installed the daemon and existing native app; original executables are backed up.'
+"Installed existing native app (application-only: $ApplicationOnly); original executables are backed up."

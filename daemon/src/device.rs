@@ -1877,12 +1877,19 @@ impl<'a> Device<'a> {
         control: goxlr_types::DynamicsControl,
     ) -> Result<i32> {
         if self.hardware.device_type != DeviceType::Full
-            || self.hardware.versions.firmware.to_string() != "1.5.1.909"
+            || !["1.5.1.909", "1.5.1.910"].contains(&self.hardware.versions.firmware.to_string().as_str())
         {
-            bail!("Dynamics readback requires the 909 bridge; 908 accepts only microphone EQ keys");
+            bail!("Dynamics readback requires a 909/910 bridge; 908 accepts only microphone EQ keys");
         }
         self.read_dsp_parameter(goxlr_usb::experimental_eq::EqParameter::dynamics(control))
             .await
+    }
+
+    pub fn read_arm_diagnostic(&mut self, metric: goxlr_types::ArmDiagnostic) -> Result<u32> {
+        if self.hardware.device_type != DeviceType::Full || self.hardware.versions.firmware.to_string() != "1.5.1.910" {
+            bail!("ARM diagnostics requires the exact 910 bridge; no diagnostic command sent");
+        }
+        self.goxlr.read_arm_diagnostic(metric)
     }
 
     async fn read_dsp_parameter(
@@ -2088,6 +2095,9 @@ impl<'a> Device<'a> {
                 expected_raw,
                 profile_name,
             } => {
+                if self.hardware.versions.firmware.to_string() != "1.5.1.909" {
+                    bail!("Dynamics writes require the physically validated 909 image");
+                }
                 let parameter = goxlr_usb::experimental_eq::EqParameter::dynamics(control);
                 parameter.effect_write(raw)?;
                 parameter.effect_write(expected_raw)?;
@@ -2116,6 +2126,9 @@ impl<'a> Device<'a> {
                 expected_raw,
                 profile_name,
             } => {
+                if !["1.5.1.908", "1.5.1.909"].contains(&self.hardware.versions.firmware.to_string().as_str()) {
+                    bail!("Native EQ edits require a physically validated image");
+                }
                 let parameter =
                     goxlr_usb::experimental_eq::EqParameter::new(usize::from(band), field)?;
                 parameter.effect_write(raw)?;
@@ -2957,7 +2970,7 @@ impl<'a> Device<'a> {
                                 self.mic_profile = profile;
 
                                 debug!("Overwriting existing corrupt profile..");
-                                self.profile.save(&path, true)?;
+                                self.mic_profile.save(&path, true)?;
                             }
                             Err(e) => {
                                 bail!("Failed to Load backup profile: {}", e);
@@ -4343,12 +4356,12 @@ impl<'a> Device<'a> {
     fn device_supports_eq_readback(&self) -> bool {
         // Reads on the experimental image establish the baseline for physical validation.
         self.hardware.device_type == DeviceType::Full
-            && ["1.5.1.908", "1.5.1.909"]
+            && ["1.5.1.908", "1.5.1.909", "1.5.1.910"]
                 .contains(&self.hardware.versions.firmware.to_string().as_str())
     }
 
     fn device_supports_native_eq_profile(&self) -> bool {
-        // Enable only for the bridge whose 12 bands passed physical audio validation.
+        // Preserve the validated EQ snapshot while booting a read-only diagnostic derivative.
         self.device_supports_eq_readback()
     }
 

@@ -61,6 +61,13 @@ pub async fn handle_packet(
             Ok(DaemonResponse::Ok)
         }
 
+        DaemonRequest::ReadArmDiagnostic(serial, metric) => {
+            let (tx, rx) = oneshot::channel();
+            usb_tx.send(DeviceCommand::ReadArmDiagnostic(serial, metric, tx)).await
+                .map_err(|e| anyhow!(e.to_string()))
+                .context("Could not communicate with the GoXLR device")?;
+            Ok(DaemonResponse::ArmDiagnostic(rx.await.context("Could not read ARM diagnostic")??))
+        }
         DaemonRequest::ReadDynamicsParameter(serial, control) => {
             let (tx, rx) = oneshot::channel();
             usb_tx

@@ -623,6 +623,18 @@ pub enum DynamicsControl {
     CompressorMakeup,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u16)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ArmDiagnostic {
+    CpuAudioBit22Count = 1,
+    CpuAudioBit23Count = 2,
+    EffectRingCapacity = 3,
+    EffectRingBuffer = 4,
+    EffectRingUsed = 5,
+    SchedulerTickLow = 6,
+}
+
 impl DynamicsControl {
     pub const ALL: [Self; 11] = [
         Self::DeesserEnabled,

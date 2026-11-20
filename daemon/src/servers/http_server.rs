@@ -212,6 +212,12 @@ async fn websocket(
                                                         data: DaemonResponse::DynamicsParameter(raw),
                                                     })
                                                 }
+                                                DaemonResponse::ArmDiagnostic(value) => {
+                                                    WsResponse(WebsocketResponse {
+                                                        id: request_id,
+                                                        data: DaemonResponse::ArmDiagnostic(value),
+                                                    })
+                                                }
                                                 DaemonResponse::RecoveryPartition(data) => {
                                                     WsResponse(WebsocketResponse {
                                                         id: request_id,

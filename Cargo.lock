@@ -2775,10 +2775,14 @@ name = "goxlr-native-mic-eq"
 version = "1.2.4"
 dependencies = [
  "anyhow",
+ "cpal",
  "eframe",
  "goxlr-ipc",
  "goxlr-types",
  "interprocess",
+ "realfft",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

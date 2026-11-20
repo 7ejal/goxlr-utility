@@ -23,6 +23,21 @@ fn crc(mut state: u32, bytes: &[u8]) -> u32 {
     state
 }
 
+fn stage_literal(stage: &[u8], offset: usize, instruction: u32) -> u32 {
+    let load = word(stage, offset);
+    assert_eq!(
+        load & 0xfffff000,
+        instruction,
+        "Unexpected reset-helper literal load"
+    );
+    let address = offset + 8 + (load & 0xfff) as usize;
+    assert!(
+        address + 4 <= stage.len(),
+        "Reset-helper literal is out of bounds"
+    );
+    word(stage, address)
+}
+
 fn same_size_image(
     original: &[u8],
     bridge: &[u8],
@@ -33,14 +48,28 @@ fn same_size_image(
     const BRIDGE: usize = 0x394d0;
     const STAGE: usize = 0x39d8c;
     const ENTRY: usize = 0x244 - 0x1ac;
-    assert!(!bridge.is_empty() && bridge.len() <= 1000 && bridge.len() % 4 == 0);
+    let bridge_limit = if build == 910 { 2000 } else { 1000 };
+    assert!(!bridge.is_empty() && bridge.len() <= bridge_limit && bridge.len() % 4 == 0);
     assert!(!stage.is_empty() && stage.len() <= 864 && stage.len() % 4 == 0);
     assert_eq!(word(stage, 0), 0xe92d503f);
+    let helper_start = if build == 910 { 0x4f800 } else { 0x4f400 };
+    assert_eq!(stage_literal(stage, 0x10, 0xe59f0000), 0x39f38);
+    assert_eq!(stage_literal(stage, 0x14, 0xe59f1000), helper_start);
+    assert_eq!(
+        stage_literal(stage, 0x18, 0xe59f2000),
+        helper_start + stage.len() as u32
+    );
+    assert!(helper_start + (stage.len() as u32) < 0x4ffc0);
+    let zero_bytes = if build == 910 { 1000 } else { bridge.len() };
     assert!(
-        original[BRIDGE..BRIDGE + bridge.len()]
+        original[BRIDGE..BRIDGE + zero_bytes]
             .iter()
             .all(|&byte| byte == 0)
     );
+    if build == 910 {
+        assert!(bridge.len() > zero_bytes);
+        assert!(stage.ends_with(&original[BRIDGE + zero_bytes..BRIDGE + bridge.len()]));
+    }
     assert!(
         original[STAGE..STAGE + stage.len()]
             .iter()
@@ -62,7 +91,8 @@ fn same_size_image(
     let outer_crc = crc(u32::MAX, &image[0x18..]) ^ u32::MAX;
     put(&mut image, 0x14, outer_crc);
     let mut reversed = image.clone();
-    reversed[BRIDGE..BRIDGE + bridge.len()].fill(0);
+    reversed[BRIDGE..BRIDGE + bridge.len()]
+        .copy_from_slice(&original[BRIDGE..BRIDGE + bridge.len()]);
     reversed[STAGE..STAGE + stage.len()].fill(0);
     reversed[..16].copy_from_slice(&original[..16]);
     for offset in [ENTRY, 0x14, 0x1c, 0x2c, 0x3a2be, 0x3a2ac] {
@@ -80,7 +110,10 @@ fn main() -> io::Result<()> {
     let build = if raw.first().is_some_and(|arg| arg == "--build") {
         assert!(raw.len() >= 2, "Pass a reserved build number");
         let build = raw[1].to_str().unwrap().parse::<u32>().unwrap();
-        assert!([908, 909].contains(&build), "Build number is not reserved");
+        assert!(
+            [908, 909, 910].contains(&build),
+            "Build number is not reserved"
+        );
         raw.drain(..2);
         build
     } else {
@@ -89,7 +122,7 @@ fn main() -> io::Result<()> {
     let args: Vec<_> = raw.into_iter().map(PathBuf::from).collect();
     assert!(
         build == 908 || args.len() == 4,
-        "909 requires the same-size bridge form"
+        "909/910 require the same-size bridge form"
     );
     if ![3, 4].contains(&args.len())
         || args

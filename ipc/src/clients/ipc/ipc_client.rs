@@ -20,6 +20,37 @@ impl IPCClient {
         }
     }
 
+    pub async fn read_mic_level(&mut self, serial: &str) -> Result<f64> {
+        match self
+            .request(DaemonRequest::GetMicLevel(serial.into()))
+            .await?
+        {
+            DaemonResponse::MicLevel(level)
+                if level.is_finite() && (-72.2..=0.).contains(&level) =>
+            {
+                Ok(level)
+            }
+            DaemonResponse::MicLevel(_) => bail!("Invalid device microphone level"),
+            DaemonResponse::Error(error) => Err(anyhow!(error)),
+            _ => bail!("Unexpected microphone level response"),
+        }
+    }
+
+    pub async fn read_arm_diagnostic(
+        &mut self,
+        serial: &str,
+        metric: goxlr_types::ArmDiagnostic,
+    ) -> Result<u32> {
+        match self
+            .request(DaemonRequest::ReadArmDiagnostic(serial.into(), metric))
+            .await?
+        {
+            DaemonResponse::ArmDiagnostic(value) => Ok(value),
+            DaemonResponse::Error(error) => Err(anyhow!(error)),
+            _ => bail!("Unexpected ARM diagnostic response"),
+        }
+    }
+
     pub async fn read_mic_eq_parameter(
         &mut self,
         serial: &str,
@@ -107,6 +138,7 @@ impl Client for IPCClient {
             }
             DaemonResponse::MicEqParameter(_) => bail!("Unexpected DSP EQ readback response"),
             DaemonResponse::DynamicsParameter(_) => bail!("Unexpected DSP dynamics response"),
+            DaemonResponse::ArmDiagnostic(_) => bail!("Unexpected ARM diagnostic response"),
             DaemonResponse::RecoveryPartition(_) => bail!("Unexpected recovery partition response"),
             DaemonResponse::Patch(_patch) => {
                 Err(anyhow!("Received Patch as response, shouldn't happen!"))

@@ -15,12 +15,22 @@ use std::time::Duration;
 pub const VERIFIED_FIRMWARE: &str = "1.5.1.907";
 pub const READBACK_FIRMWARE: &str = "1.5.1.908";
 pub const DYNAMICS_FIRMWARE: &str = "1.5.1.909";
+pub const ARM_DIAGNOSTICS_FIRMWARE: &str = "1.5.1.910";
 pub const DYNAMICS_CONTROLS_VERIFIED: bool = false;
 pub fn has_readback(firmware: &str) -> bool {
-    [READBACK_FIRMWARE, DYNAMICS_FIRMWARE].contains(&firmware)
+    [
+        READBACK_FIRMWARE,
+        DYNAMICS_FIRMWARE,
+        ARM_DIAGNOSTICS_FIRMWARE,
+    ]
+    .contains(&firmware)
 }
 // All 12 bands passed reversible physical frequency, gain and width tests on 908.
 pub const NATIVE_CONTROLS_VERIFIED: bool = true;
+
+pub fn native_eq_writes_verified(firmware: &str) -> bool {
+    NATIVE_CONTROLS_VERIFIED && [READBACK_FIRMWARE, DYNAMICS_FIRMWARE].contains(&firmware)
+}
 
 #[derive(Clone)]
 pub struct Live {
@@ -28,6 +38,7 @@ pub struct Live {
     pub firmware: String,
     pub bands: Bands,
     pub dynamics: Option<[i32; 11]>,
+    pub mic_profiles: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -78,6 +89,7 @@ fn read_bands(serial: &str, mixer: &MixerStatus) -> Result<Live> {
         firmware: mixer.hardware.versions.firmware.to_string(),
         bands,
         dynamics: None,
+        mic_profiles: Vec::new(),
     })
 }
 
@@ -94,6 +106,15 @@ pub async fn read() -> Result<Vec<Live>> {
             .collect::<Result<Vec<_>>>()?;
         devices.sort_by(|a, b| a.key.serial.cmp(&b.key.serial));
         for device in &mut devices {
+            device.mic_profiles = client
+                .status()
+                .files
+                .mic_profiles
+                .iter()
+                .filter(|name| crate::profiles::valid_name(name))
+                .cloned()
+                .collect();
+            device.mic_profiles.sort();
             if has_readback(&device.firmware) {
                 for (index, band) in device.bands.iter_mut().enumerate() {
                     use goxlr_types::MicEqField::{Frequency, Gain, Width};
@@ -120,7 +141,7 @@ pub async fn read() -> Result<Vec<Live>> {
             }
         }
         for device in &mut devices {
-            if device.firmware == DYNAMICS_FIRMWARE {
+            if [DYNAMICS_FIRMWARE, ARM_DIAGNOSTICS_FIRMWARE].contains(&device.firmware.as_str()) {
                 let mut values = [0; 11];
                 for (index, control) in goxlr_types::DynamicsControl::ALL.into_iter().enumerate() {
                     values[index] = client
@@ -138,6 +159,83 @@ pub async fn read() -> Result<Vec<Live>> {
     })
     .await
     .context("Daemon status timed out")?
+}
+
+pub async fn microphone_profile(
+    expected: Live,
+    action: crate::profiles::Action,
+) -> Result<Vec<Live>> {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let mut current = read().await?.into_iter().find(|device| device.key.serial == expected.key.serial)
+            .context("GoXLR disconnected")?;
+        let mut client = connect().await?;
+        client.poll_status().await?;
+        let mixer = client.status().mixers.get(&expected.key.serial).context("GoXLR disconnected")?;
+        ensure!(mixer.hardware.device_type == DeviceType::Full && mixer.mic_profile_name == current.key.name && mixer.hardware.versions.firmware.to_string() == current.firmware,
+            "Microphone profile changed; refresh before proceeding");
+        current.mic_profiles = client.status().files.mic_profiles.clone();
+        let before = stock_mic_settings(mixer)?;
+        let (command, target) = crate::profiles::command(&expected, &current, &action)?;
+        client.command(&expected.key.serial, command).await?;
+        // The daemon acknowledges commands before publishing its next status snapshot.
+        let mut confirmed = false;
+        for _ in 0..20 {
+            client.poll_status().await?;
+            let mixer = client.status().mixers.get(&expected.key.serial).context("GoXLR disconnected")?;
+            ensure!(mixer.hardware.versions.firmware.to_string() == current.firmware,
+                "Firmware changed during profile operation");
+            if mixer.mic_profile_name == target { confirmed = true; break; }
+            ensure!(mixer.mic_profile_name == current.key.name,
+                "Another microphone profile became active; refresh before further edits");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        ensure!(confirmed, "Profile acknowledgement did not reach the active status; refresh before retrying");
+        let devices = read().await?;
+        let actual = devices.iter().find(|device| device.key.serial == expected.key.serial)
+            .context("GoXLR disconnected after profile operation")?;
+        ensure!(actual.key.name == target && actual.firmware == current.firmware,
+            "Profile operation acknowledged but active profile differs; refresh before further edits");
+        if !matches!(action, crate::profiles::Action::Load(_)) {
+            ensure!(actual.bands == current.bands && actual.dynamics == current.dynamics,
+                "Live DSP settings changed while saving; refresh before further edits");
+            client.poll_status().await?;
+            let mixer = client.status().mixers.get(&expected.key.serial).context("GoXLR disconnected")?;
+            ensure!(stock_mic_settings(mixer)? == before,
+                "Stock microphone settings changed while saving; refresh before further edits");
+        }
+        Ok(devices)
+    }).await.context("Microphone profile operation timed out; refresh before retrying")?
+}
+
+fn stock_mic_settings(mixer: &MixerStatus) -> Result<serde_json::Value> {
+    Ok(serde_json::to_value((
+        &mixer.mic_status.mic_type,
+        &mixer.mic_status.mic_gains,
+        &mixer.mic_status.noise_gate,
+        &mixer.mic_status.compressor,
+        mixer.levels.deess,
+    ))?)
+}
+
+// This is the stock device scale; peak/RMS semantics and absolute calibration are unverified.
+pub async fn read_mic_activity(expected: ProfileKey) -> Result<f64> {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        let mut client = connect().await?;
+        client.poll_status().await?;
+        let mixer = client
+            .status()
+            .mixers
+            .get(&expected.serial)
+            .context("GoXLR disconnected")?;
+        ensure!(
+            mixer.hardware.device_type == DeviceType::Full
+                && mixer.mic_profile_name == expected.name,
+            "Active microphone profile changed"
+        );
+        client.read_mic_level(&expected.serial).await
+    })
+    .await
+    .context("Microphone activity read timed out")?
 }
 
 pub async fn apply_dynamics(expected: Live, index: usize, raw: i32) -> Result<Vec<Live>> {
@@ -196,7 +294,7 @@ pub async fn apply(expected: Live, index: usize, edit: Edit) -> Result<Live> {
         if has_readback(&current.firmware) {
             use goxlr_types::MicEqField::{Frequency, Gain, Width};
             ensure!(
-                NATIVE_CONTROLS_VERIFIED,
+                native_eq_writes_verified(&current.firmware),
                 "Physical validation of native controls is incomplete"
             );
             ensure!(
@@ -328,6 +426,55 @@ fn stock_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore = "Requires the attached verified GoXLR; explicitly saves the current mic profile and checks no DSP/stock setting changes"]
+    async fn native_live_save_mic_profile() -> Result<()> {
+        let devices = read().await?;
+        ensure!(devices.len() == 1, "Expected one full-size GoXLR");
+        let baseline = devices[0].clone();
+        let after = microphone_profile(baseline.clone(), crate::profiles::Action::Save).await?;
+        ensure!(
+            after.len() == 1
+                && after[0].key == baseline.key
+                && after[0].bands == baseline.bands
+                && after[0].dynamics == baseline.dynamics,
+            "Saving changed the live snapshot"
+        );
+        println!(
+            "PASS current microphone profile saved; complete live DSP snapshot and stock microphone settings unchanged"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn diagnostic_derivative_can_read_without_enabling_unvalidated_edits() {
+        for firmware in [READBACK_FIRMWARE, DYNAMICS_FIRMWARE] {
+            assert!(has_readback(firmware) && native_eq_writes_verified(firmware));
+        }
+        assert!(has_readback(ARM_DIAGNOSTICS_FIRMWARE));
+        assert!(!native_eq_writes_verified(ARM_DIAGNOSTICS_FIRMWARE));
+        for firmware in ["1.5.1.901", "1.5.1.911", "1.3.31.83", ""] {
+            assert!(!has_readback(firmware) && !native_eq_writes_verified(firmware));
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires the attached full-size GoXLR; five stock level reads, no writes"]
+    async fn native_live_mic_activity() -> Result<()> {
+        let devices = read().await?;
+        ensure!(devices.len() == 1, "Expected one full-size GoXLR");
+        for _ in 0..5 {
+            let level = read_mic_activity(devices[0].key.clone()).await?;
+            ensure!(
+                level.is_finite() && (-72.2..=0.).contains(&level),
+                "Invalid microphone activity"
+            );
+            println!("Device microphone activity: {level:.2} (uncalibrated device scale)");
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     #[ignore = "Requires the authorized 909 image; edits and restores all 47 fields"]
@@ -607,6 +754,18 @@ mod tests {
                     .send(DaemonResponse::DynamicsParameter(*control.range().start()))
                     .await?;
             }
+            for response in [
+                DaemonResponse::MicLevel(-24.),
+                DaemonResponse::MicLevel(1.),
+                DaemonResponse::Ok,
+            ] {
+                ensure!(
+                    matches!(socket.read().await.context("Missing level request")??,
+                    DaemonRequest::GetMicLevel(serial) if serial == "fixture"),
+                    "Wrong level request"
+                );
+                socket.send(response).await?;
+            }
             socket.read().await.context("Missing timeout probe")??;
             socket
                 .send(DaemonResponse::Error("Simulated DSP timeout".into()))
@@ -638,6 +797,18 @@ mod tests {
                 "Wrong dynamics response"
             );
         }
+        ensure!(
+            client.read_mic_level("fixture").await? == -24.,
+            "Wrong microphone activity"
+        );
+        ensure!(
+            client.read_mic_level("fixture").await.is_err(),
+            "Accepted out-of-range activity"
+        );
+        ensure!(
+            client.read_mic_level("fixture").await.is_err(),
+            "Accepted wrong activity reply"
+        );
         let error = client
             .read_mic_eq_parameter("fixture", 1, MicEqField::Width)
             .await
@@ -667,6 +838,7 @@ mod tests {
             firmware: "1.5.1.907".into(),
             bands: defaults(),
             dynamics: None,
+            mic_profiles: Vec::new(),
         };
         assert!(matches!(
             stock_command(&live, &live, 5, Edit::Frequency(1500.)),

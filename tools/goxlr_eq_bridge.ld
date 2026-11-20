@@ -1,6 +1,7 @@
 /* Offline link target. Startup reservation/loading is not yet installed. */
 OUTPUT_ARCH(arm)
 ENTRY(goxlr_eq_shi_observer_hook)
+PROVIDE(__reset_helper_start = 0x4f400);
 MEMORY { bridge (rwx) : ORIGIN = 0x4f000, LENGTH = 0x1000 }
 SECTIONS
 {
@@ -14,5 +15,5 @@ SECTIONS
     } > bridge
     /DISCARD/ : { *(.comment*) *(.note*) *(.ARM.attributes) }
     ASSERT(__bridge_bss_end <= 0x50000, "Bridge exceeds experimental reservation")
-    ASSERT(__bridge_bss_end <= 0x4f400, "Bridge overlaps same-size reset helper")
+    ASSERT(__bridge_bss_end <= __reset_helper_start, "Bridge overlaps same-size reset helper")
 }

@@ -1,4 +1,4 @@
-// Inspect the known 901/908 images offline; never opens USB or changes firmware.
+// Inspect the known 901/908/909 images offline; never opens USB or changes firmware.
 // Run: go run tools/goxlr_dynamics_map.go -firmware <image.bin>
 package main
 
@@ -19,16 +19,23 @@ type control struct {
 	Dispatch                                                       [2]uint32
 }
 
+type eqControl struct {
+	Band  int
+	Field string
+	control
+}
+
 func main() {
-	firmware := flag.String("firmware", "", "known 901 or tested 908 image; read only")
+	firmware := flag.String("firmware", "", "known 901/908/909 image; read only")
+	eqDescriptors := flag.Bool("eq-descriptors", false, "decode only the 36 EQ descriptors; defaults are not effective boot/reset settings")
 	flag.Parse()
-	if err := inspect(*firmware); err != nil {
+	if err := inspect(*firmware, *eqDescriptors); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func inspect(path string) error {
+func inspect(path string, eqDescriptors bool) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -96,6 +103,44 @@ func inspect(path string) error {
 		}
 	}
 	signed := func(v uint32) int32 { return int32(v<<8) >> 8 }
+	if eqDescriptors {
+		starts := [...]uint32{0x126, 0xf8, 0x113, 0x129, 0x116, 0x11d, 0x12c, 0x120, 0x109, 0x12f, 0xf5, 0x10c}
+		var records []eqControl
+		for band, start := range starts {
+			for field, name := range []string{"Frequency", "Gain", "Width"} {
+				key := start + uint32(field)
+				index, ok := x[0x41abe9+key]
+				if !ok || index == 0xffffff {
+					return fmt.Errorf("missing EQ key %03X", key)
+				}
+				address := uint32(0x41a391) + 8*index
+				row := make([]uint32, 8)
+				for i := range row {
+					value, ok := x[address+uint32(i)]
+					if !ok {
+						return fmt.Errorf("missing EQ descriptor word")
+					}
+					row[i] = value
+				}
+				if row[4] != key {
+					return fmt.Errorf("EQ descriptor key mismatch")
+				}
+				route := x[0x427441+(row[6]&0xffff)]
+				if route>>22 != 0 {
+					return fmt.Errorf("unrecognized EQ dispatch class")
+				}
+				slot := (route >> 10) & 0xfff
+				pair := [2]uint32{x[0x427536+2*slot], x[0x427537+2*slot]}
+				callback := x[0x427526+(pair[1]&255)]
+				records = append(records, eqControl{band + 1, name, control{key, index, slot, callback, pair[0] & 0xffff,
+					(pair[1] >> 8) & 255, route & 1023, signed(row[0]), signed(row[2]), signed(row[3]), row, pair}})
+			}
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]any{"image_sha256": hash, "eq_descriptors": records,
+			"default_scope": "Serialized ROM descriptor field 3 only; effective boot/runtime defaults are not established and these values do not authorize reset."})
+	}
 	var controls []control
 	for key := uint32(1); key <= 0x167; key++ {
 		index := x[0x41abe9+key]

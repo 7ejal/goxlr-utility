@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)][string]$BackupDirectory,
     [Parameter(Mandatory)][string]$Firmware908,
     [Parameter(Mandatory)][string]$Firmware909,
+    [ValidateSet(908,909)][int]$BaselineBuild = 908,
     [string]$ApplicationDirectory = 'C:/Users/real5/Documents/ChatGPT/Goxlr/GoXLR-Native-Mic-EQ',
     [string]$InstalledDaemon = 'C:/Program Files/GoXLR Utility/goxlr-daemon.exe',
     [string]$Endpoint = 'http://127.0.0.1:14564/api/command',
@@ -28,8 +29,8 @@ function Snapshot($serial) {
 }
 $status = (Request 'GetStatus').Status
 $devices = @($status.mixers.PSObject.Properties)
-if ($devices.Count -ne 1 -or ($devices[0].Value.hardware.versions.firmware -join '.') -ne '1.5.1.908') {
-    throw 'Exactly one running 908 device is required.'
+if ($devices.Count -ne 1 -or ($devices[0].Value.hardware.versions.firmware -join '.') -ne "1.5.1.$BaselineBuild") {
+    throw "Exactly one running $BaselineBuild device is required."
 }
 $serial = $devices[0].Name
 $mixer = $devices[0].Value
@@ -39,6 +40,16 @@ if ((Get-FileHash $Firmware908).Hash -ne 'C8607989063552E5A412AD3B29B4E1DB355D9B
 }
 if (Test-Path -LiteralPath $BackupDirectory) { throw 'Choose a new backup directory.' }
 $baseline = @(Snapshot $serial)
+$dynamics = @()
+if ($BaselineBuild -eq 909) {
+    foreach ($control in 'DeesserEnabled','DeesserAmount','DeesserAttack','DeesserRelease','DeesserMode',
+        'DeesserScalar','CompressorRatio','CompressorThreshold','CompressorAttack','CompressorRelease','CompressorMakeup') {
+        $first = (Request @{ ReadDynamicsParameter = @($serial, $control) }).DynamicsParameter
+        $second = (Request @{ ReadDynamicsParameter = @($serial, $control) }).DynamicsParameter
+        if ($null -eq $first -or $first -ne $second) { throw 'Unstable dynamics readback; stopping.' }
+        $dynamics += [pscustomobject]@{ Control = $control; Raw = [int]$first }
+    }
+}
 if ($DryRun) { 'Would back up original files, capture 36 fields, and save live profiles for restart.'; return }
 $backup = (New-Item -ItemType Directory -Path $BackupDirectory).FullName
 Copy-Item -LiteralPath $Firmware908 -Destination (Join-Path $backup 'firmware-908.bin')
@@ -54,6 +65,9 @@ if (Test-Path -LiteralPath $config) {
 }
 $status | ConvertTo-Json -Depth 100 | Set-Content -Encoding UTF8 (Join-Path $backup 'status-before.json')
 $baseline | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $backup 'dsp-baseline-36.json')
+if ($dynamics.Count) {
+    $dynamics | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $backup 'dynamics-baseline-11.json')
+}
 $active = @(
     @{ Source = Join-Path $status.paths.profile_directory ($mixer.profile_name + '.goxlr'); Backup = 'original-mixer.goxlr' },
     @{ Source = Join-Path $status.paths.mic_profile_directory ($mixer.mic_profile_name + '.goxlrMicProfile'); Backup = 'original-mic.goxlrMicProfile' }
@@ -75,6 +89,11 @@ try {
     if (($baseline | ConvertTo-Json -Compress) -ne (@(Snapshot $serial) | ConvertTo-Json -Compress)) {
         throw 'Live microphone settings changed during saving.'
     }
+    foreach ($item in $dynamics) {
+        if ((Request @{ ReadDynamicsParameter = @($serial, $item.Control) }).DynamicsParameter -ne $item.Raw) {
+            throw 'Live dynamics changed during saving.'
+        }
+    }
 } catch {
     foreach ($file in $active) { Copy-Item -LiteralPath $file.Copy -Destination $file.Source -Force }
     throw
@@ -82,4 +101,4 @@ try {
 Get-ChildItem -LiteralPath $backup -File -Recurse | ForEach-Object {
     [pscustomobject]@{ Path = $_.FullName.Substring($backup.Length + 1); SHA256 = (Get-FileHash $_.FullName).Hash }
 } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $backup 'SHA256.json')
-'Backed up 908 image, installed executables, all profiles and 36 live values; live profiles saved for restart.'
+"Backed up firmware images, installed executables, all profiles and $($baseline.Count + $dynamics.Count) live values on $BaselineBuild; live profiles saved for restart."

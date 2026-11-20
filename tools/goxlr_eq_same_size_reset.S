@@ -60,6 +60,19 @@ relocated_cleanup:
     add r0, r0, #4
     cmp r0, r1
     blo 5b
+#ifdef GOXLR_ARM_DIAGNOSTICS
+    ldr r0, =bridge_source + 1000
+    ldr r1, =original_source_tail
+    ldr r2, =original_source_tail_end
+7:
+    ldr r3, [r1], #4
+    str r3, [r0]
+    mcr p15, 0, r0, c7, c10, 1
+    add r0, r0, #4
+    cmp r1, r2
+    blo 7b
+    mov r3, #0
+#endif
     ldr r0, =stage_source
     ldr r1, =stage_restore_end
 6:
@@ -93,6 +106,13 @@ relocated_cleanup:
     pop {r0-r5, r12, lr}
     ldr pc, =0x244
     .ltorg
+#ifdef GOXLR_ARM_DIAGNOSTICS
+.global original_source_tail
+original_source_tail:
+    .incbin "eq-original-tail.bin"
+.global original_source_tail_end
+original_source_tail_end:
+#endif
 .global same_size_end
 same_size_end:
 .equ stage_restore_end, stage_source + same_size_end - same_size_stage

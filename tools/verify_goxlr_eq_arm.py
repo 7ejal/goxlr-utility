@@ -289,7 +289,7 @@ def verify_physical_boot2(stock, boot2, golden, application):
     run(golden, golden_keys=True)
     print("PASS recovered Boot2 loads same-size ARM, rejects bad CRC/oversize, and selects Golden for mask 0x900001")
 
-def verify_serialized_lab(lab, sections, symbols, same_size=False):
+def verify_serialized_lab(lab, sections, symbols, same_size=False, original=None):
     assert lab[:16] == b"GXLAB_NOT_FLASH!" or (same_size and lab[:16] == b"GoXLR Firmware\0\0")
     checksum_at = 0x54 + 4 * struct.unpack_from("<I", lab, 0x28)[0] - 4
     assert lab[checksum_at + 4:checksum_at + 14] == b"TCHDSP_V2:"
@@ -300,6 +300,11 @@ def verify_serialized_lab(lab, sections, symbols, same_size=False):
     board.cpu.reg_write(UC_ARM_REG_CPSR, 0xd3)
     if same_size:
         assert len(lab) == 640044 and checksum_at == 0x3a2ac
+        load_end_instruction = struct.unpack_from("<I", lab, 0x39d8c + 0x18)[0]
+        assert load_end_instruction & 0xfffff000 == 0xe59f2000
+        helper_end = struct.unpack_from("<I", lab, 0x39d8c + 0x20 + (load_end_instruction & 0xfff))[0]
+        assert symbols["__reset_helper_start"] < helper_end <= 0x4ffc0
+        assert helper_end - symbols["__reset_helper_start"] <= 864
         for control in [0, 4]:
             trial = Board(lab, [], symbols)
             trial.cpu.reg_write(UC_ARM_REG_CPSR, 0xa80000d3)
@@ -311,7 +316,8 @@ def verify_serialized_lab(lab, sections, symbols, same_size=False):
             assert trial.cpu.reg_read(UC_ARM_REG_CPSR) == 0xa80000d3
             assert trial.read32(0x244) == 0xeb003c51
             bridge_length = symbols["__bridge_load_end"] - 0x4f000
-            assert bytes(trial.cpu.mem_read(0x3967c, bridge_length)) == bytes(bridge_length)
+            expected_source = original[0x394d0:0x394d0 + bridge_length] if original else bytes(bridge_length)
+            assert bytes(trial.cpu.mem_read(0x3967c, bridge_length)) == expected_source
             assert bytes(trial.cpu.mem_read(0x39f38, 864)) == bytes(864)
             for address, data in sections:
                 assert bytes(trial.cpu.mem_read(address, len(data))) == data
@@ -403,7 +409,30 @@ def verify_dynamics_allowlist(board):
         for word in words:
             board.call("goxlr_eq_observe_shi_word", (word,))
         assert board.dispatch(1) == bytes([0])+key.to_bytes(2,"little")+value.to_bytes(4,"little",signed=True)
-    print("PASS actual serialized 909 bridge: all 47 EQ/dynamics keys, 313 rejected keys, signed replies")
+    print("PASS actual serialized dynamics bridge: all 47 EQ/dynamics keys, 313 rejected keys, signed replies")
+
+
+def verify_arm_diagnostics(board):
+    board.write32(0x3ed64, 0xffffffff)
+    board.write32(0x3ed88, 0x87654321)
+    board.set_ticks(0x1000000ab)
+    ring = [0x3d79d, 0x404, 9, 1000]
+    for i, value in enumerate(ring):
+        board.write32(0x38dd4 + 4*i, value)
+    expected = {1: 0xffffffff, 2: 0x87654321, 3: 0x404, 4: 0x3d79d, 5: 37, 6: 0xab}
+    before = bytes(board.cpu.mem_read(0x38dd4, 16))
+    for metric, value in expected.items():
+        assert board.dispatch(2, metric.to_bytes(2, "little")) == bytes([0])+metric.to_bytes(2,"little")+value.to_bytes(4,"little")
+        assert bytes(board.cpu.mem_read(0x38dd4, 16)) == before
+    for metric in [0, 7, 255, 65535]:
+        assert board.dispatch(2, metric.to_bytes(2,"little")) == b"\x03"
+    for payload in [b"", b"\x01", b"\x01\x00\x00"]:
+        assert board.dispatch(2, payload) == b"\x03"
+    board.write32(0x38dd4 + 8, 0x404)
+    assert board.dispatch(2, b"\x05\x00") == b"\x03"
+    board.write32(0x38dd4 + 8, 9)
+    assert board.read32(0x3ed64) == 0xffffffff and board.read32(0x3ed88) == 0x87654321
+    print("PASS serialized ARM diagnostic dispatch, unsigned counters, bounded ring reads, malformed/unknown rejection and read-only state")
 
 
 def main():
@@ -415,6 +444,7 @@ def main():
     parser.add_argument("--boot2", type=Path)
     parser.add_argument("--golden", type=Path)
     parser.add_argument("--dynamics", action="store_true")
+    parser.add_argument("--arm-diagnostics", action="store_true")
     args = parser.parse_args()
     stock = args.firmware.read_bytes()
     assert hashlib.sha256(stock).hexdigest() == STOCK_SHA
@@ -425,10 +455,14 @@ def main():
     if args.lab:
         verify_serialized_lab(args.lab.read_bytes(), sections, symbols)
     if args.same_size:
-        board = verify_serialized_lab(args.same_size.read_bytes(), sections, symbols, same_size=True)
+        board = verify_serialized_lab(args.same_size.read_bytes(), sections, symbols, same_size=True, original=stock)
         if args.dynamics:
-            assert struct.unpack_from("<I", args.same_size.read_bytes(), 0x1c)[0] == 909
+            assert struct.unpack_from("<I", args.same_size.read_bytes(), 0x1c)[0] in (909, 910)
             verify_dynamics_allowlist(board)
+        if args.arm_diagnostics:
+            assert struct.unpack_from("<I", args.same_size.read_bytes(), 0x1c)[0] == 910
+            assert symbols["__bridge_bss_end"] <= symbols["__reset_helper_start"] == 0x4f800
+            verify_arm_diagnostics(board)
         if args.boot2 and args.golden:
             verify_physical_boot2(stock, args.boot2.read_bytes(), args.golden.read_bytes(), args.same_size.read_bytes()[0x24:])
 

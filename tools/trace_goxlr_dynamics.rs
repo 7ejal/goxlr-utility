@@ -6,6 +6,12 @@ use dsp56300_emu::{
 };
 use std::{env, fs};
 
+#[path = "dynamics_kernel.rs"]
+mod dynamics_kernel;
+
+#[path = "dynamics_graph_provenance.rs"]
+mod dynamics_graph_provenance;
+
 const FRAME: u32 = 0x1800;
 const QUEUE: u32 = 0x2000;
 const VALUES: u32 = 0x1200;
@@ -113,6 +119,10 @@ fn main() {
     });
     state.registers[reg::SR] = 0x840300;
     state.registers[reg::OMR] = 0x200000;
+    if env::args().any(|arg| arg == "--graph-provenance") {
+        dynamics_graph_provenance::run(&mut state, &mut jit, build);
+        return;
+    }
     // Synthetic allocations and a stopped scheduler: tests actual parser/mailbox/query code,
     // not physical object allocation, SHI transport, sample processing or audio quality.
     for (address, value) in [
@@ -142,6 +152,10 @@ fn main() {
         let rate_offset = if index == 5 { 42 } else { 21 };
         state.write_memory(MemSpace::X, object + rate_offset, rate_pair.0);
         state.write_memory(MemSpace::X, object + rate_offset + 1, rate_pair.1);
+    }
+    if env::args().any(|arg| arg == "--kernel") {
+        dynamics_kernel::run(&mut state, &mut jit, build);
+        return;
     }
     let mut cases = 0;
     for key in keys {

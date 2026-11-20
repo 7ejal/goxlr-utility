@@ -188,6 +188,9 @@ extern uint32_t goxlr_eq_now_ticks(void);
 extern uint32_t goxlr_eq_timeout_ticks(void);
 extern bool goxlr_eq_enqueue_frame(const uint8_t *frame, unsigned length);
 extern void goxlr_eq_usb_reply(unsigned status, const uint8_t *payload, unsigned length);
+#ifdef GOXLR_ARM_DIAGNOSTICS
+extern bool goxlr_arm_diagnostic_read(uint16_t metric, uint32_t *value);
+#endif
 
 static EqReadback live_readback;
 
@@ -207,6 +210,21 @@ void goxlr_eq_usb_dispatch(unsigned unused0, unsigned unused1, unsigned subcomma
     unsigned reply_length = 1;
     goxlr_eq_lock();
     uint32_t now = goxlr_eq_now_ticks();
+#ifdef GOXLR_ARM_DIAGNOSTICS
+    if (subcommand == 2 && length == 2) {
+        uint16_t metric = (uint16_t)(request[0] | ((uint16_t)request[1] << 8));
+        uint32_t value;
+        reply[0] = EQ_USB_INVALID;
+        if (goxlr_arm_diagnostic_read(metric, &value)) {
+            reply[0] = EQ_USB_OK;
+            reply[1] = request[0];
+            reply[2] = request[1];
+            for (unsigned i = 0; i < 4; ++i)
+                reply[3 + i] = (uint8_t)(value >> (8 * i));
+            reply_length = sizeof(reply);
+        }
+    } else
+#endif
     if (subcommand == 0) {
         reply[0] = goxlr_eq_usb_submit(&live_readback, request, length, now,
                                       goxlr_eq_timeout_ticks(), goxlr_eq_enqueue_frame);

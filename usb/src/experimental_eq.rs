@@ -6,6 +6,16 @@ use anyhow::{Result, bail, ensure};
 pub const SUBMIT_COMMAND: u32 = 0x0081_9000;
 pub const POLL_COMMAND: u32 = 0x0081_9001;
 
+pub fn arm_diagnostic_reply(metric: goxlr_types::ArmDiagnostic, payload: &[u8]) -> Result<u32> {
+    match payload {
+        [0, lo, hi, a, b, c, d] if u16::from_le_bytes([*lo, *hi]) == metric as u16 => {
+            Ok(u32::from_le_bytes([*a, *b, *c, *d]))
+        }
+        [3] => bail!("Firmware rejected the ARM diagnostic"),
+        _ => bail!("Invalid ARM diagnostic response"),
+    }
+}
+
 const BAND_KEYS: [u16; 12] = [
     0x126, 0xf8, 0x113, 0x129, 0x116, 0x11d, 0x12c, 0x120, 0x109, 0x12f, 0xf5, 0x10c,
 ];
@@ -100,6 +110,24 @@ impl EqParameter {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn arm_diagnostics_preserve_unsigned_values_and_validate_framing() -> Result<()> {
+        use goxlr_types::ArmDiagnostic::CpuAudioBit22Count;
+        assert_eq!(
+            arm_diagnostic_reply(CpuAudioBit22Count, &[0, 1, 0, 255, 255, 255, 255])?,
+            u32::MAX
+        );
+        for packet in [
+            &[0, 2, 0, 0, 0, 0, 0][..],
+            &[0, 1, 0][..],
+            &[3][..],
+            &[1][..],
+        ] {
+            assert!(arm_diagnostic_reply(CpuAudioBit22Count, packet).is_err());
+        }
+        Ok(())
+    }
 
     #[test]
     fn dynamics_packets_validate_keys_and_rom_bounds() -> Result<()> {
@@ -221,6 +249,26 @@ mod tests {
         assert!(
             device
                 .read_recovery_partition(goxlr_types::RecoveryPartition::Boot2, 0, 1025)
+                .is_err()
+        );
+        assert!(device.0.is_empty());
+        device.0.push_back((
+            Command::ReadArmDiagnostic,
+            vec![1, 0],
+            vec![0, 1, 0, 255, 255, 255, 255],
+        ));
+        assert_eq!(
+            device.read_arm_diagnostic(goxlr_types::ArmDiagnostic::CpuAudioBit22Count)?,
+            u32::MAX
+        );
+        device.0.push_back((
+            Command::ReadArmDiagnostic,
+            vec![1, 0],
+            vec![0, 2, 0, 0, 0, 0, 0],
+        ));
+        assert!(
+            device
+                .read_arm_diagnostic(goxlr_types::ArmDiagnostic::CpuAudioBit22Count)
                 .is_err()
         );
         assert!(device.0.is_empty());

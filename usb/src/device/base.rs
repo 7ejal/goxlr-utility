@@ -82,6 +82,11 @@ pub trait GoXLRCommands: ExecutableGoXLR {
         }
     }
 
+    fn read_arm_diagnostic(&mut self, metric: goxlr_types::ArmDiagnostic) -> Result<u32> {
+        let reply = self.request_data(Command::ReadArmDiagnostic, &(metric as u16).to_le_bytes())?;
+        crate::experimental_eq::arm_diagnostic_reply(metric, &reply)
+    }
+
     fn poll_eq_read(
         &mut self,
         parameter: crate::experimental_eq::EqParameter,
