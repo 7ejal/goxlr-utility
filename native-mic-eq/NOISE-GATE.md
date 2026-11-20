@@ -41,11 +41,44 @@ This existing behavior is documented here and was not changed without physical
 validation. `GateMode` is serialized from the profile and has no independently
 validated meanings or native controls.
 
+## Original serialized descriptors
+
+The optional `-gate-descriptors` mode of `tools/goxlr_dynamics_map.go` now
+decodes the original ROM tables after checking the complete image hash and
+bootstrap table descriptors. Hash-pinned 901 and 909 give identical eight
+records below. Descriptor defaults are not effective boot/reset settings.
+Callback addresses are dispatch wrappers, not identified leaf algorithms.
+
+| Key | Descriptor index | Mailbox | Callback P: | Command / object | Raw min..max | Descriptor default |
+| --- | --- | --- | --- | --- | --- | --- |
+| `0x10` | 58 | 28 | `402A3E` | 9 / 3 | 0..2 | 1 |
+| `0x11` | 59 | 29 | `402A3E` | 10 / 3 | −61..0 | −40 |
+| `0x12` | 61 | 31 | `402A3E` | 9 / 4 | 0..2 | 2 |
+| `0x13` | 62 | 32 | `402A3E` | 10 / 4 | −61..0 | −61 |
+| `0x14` | 63 | 20 | `402A45` | 5 / 1 | 0..1 | 1 |
+| `0x15` | 64 | 21 | `402A45` | 6 / 1 | −61..0 | −61 |
+| `0x16` | 65 | 22 | `402A45` | 7 / 1 | 0..45 | 0 |
+| `0x17` | 66 | 23 | `402A45` | 8 / 1 | 0..45 | 4 |
+
+Keys `0x12/0x13` have no names or public control paths established by this
+audit. Their parallel mode/threshold-shaped domains do not prove hysteresis,
+hold or an additional microphone gate. Object indices are dispatcher pointer
+slots, not physical signal paths. Threshold `0x11` uses conversion selector 5;
+other listed controls except `0x13` use 1023 (the direct sentinel). `0x13`
+also uses selector 5. These descriptors alone do not authorize wider host
+threshold ranges or additional firmware read/write keys.
+
+Validation: 901/909 static decode and `go vet` passed. Existing EQ descriptor
+outputs remain byte-identical for both images. Default 901 output retains
+the canonical fixture SHA256
+`110092278af14803b0f5510fc18e8cbd2b4ed8a397fc4bcc0d797868f3057064`.
+No processing, timing or hardware test was performed for these new records.
+
 The 909/910 bridge allowlist and `DynamicsControl` currently contain 36 EQ,
 six de-esser and five compressor fields; gate fields are excluded. The stock
 status gate values are profile state, not additional members of the 47 proven
-DSP readbacks. The existing dynamics ROM inspector does not establish gate
-descriptor limits, callback addresses or internal state ownership.
+DSP readbacks. Static descriptor and dispatcher decoding does not establish
+the gate's runtime state ownership or internal processing behavior.
 
 ## Features still blocked
 

@@ -28,14 +28,18 @@ type eqControl struct {
 func main() {
 	firmware := flag.String("firmware", "", "known 901/908/909 image; read only")
 	eqDescriptors := flag.Bool("eq-descriptors", false, "decode only the 36 EQ descriptors; defaults are not effective boot/reset settings")
+	gateDescriptors := flag.Bool("gate-descriptors", false, "decode only gate keys 0x10..0x17; static ROM evidence, not physical calibration")
 	flag.Parse()
-	if err := inspect(*firmware, *eqDescriptors); err != nil {
+	if err := inspect(*firmware, *eqDescriptors, *gateDescriptors); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func inspect(path string, eqDescriptors bool) error {
+func inspect(path string, eqDescriptors, gateDescriptors bool) error {
+	if eqDescriptors && gateDescriptors {
+		return fmt.Errorf("select only one descriptor mode")
+	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -103,37 +107,63 @@ func inspect(path string, eqDescriptors bool) error {
 		}
 	}
 	signed := func(v uint32) int32 { return int32(v<<8) >> 8 }
+	decodeDescriptor := func(key uint32) (control, error) {
+		index, ok := x[0x41abe9+key]
+		if !ok || index == 0xffffff {
+			return control{}, fmt.Errorf("missing key %03X", key)
+		}
+		address := uint32(0x41a391) + 8*index
+		row := make([]uint32, 8)
+		for i := range row {
+			value, ok := x[address+uint32(i)]
+			if !ok {
+				return control{}, fmt.Errorf("missing descriptor word")
+			}
+			row[i] = value
+		}
+		if row[4] != key {
+			return control{}, fmt.Errorf("descriptor key mismatch")
+		}
+		route := x[0x427441+(row[6]&0xffff)]
+		if route>>22 != 0 {
+			return control{}, fmt.Errorf("unrecognized dispatch class for key %03X", key)
+		}
+		slot := (route >> 10) & 0xfff
+		pair := [2]uint32{x[0x427536+2*slot], x[0x427537+2*slot]}
+		callback := x[0x427526+(pair[1]&255)]
+		return control{key, index, slot, callback, pair[0] & 0xffff,
+			(pair[1] >> 8) & 255, route & 1023, signed(row[0]), signed(row[2]), signed(row[3]), row, pair}, nil
+	}
+	if gateDescriptors {
+		var records []control
+		var absent []uint32
+		for key := uint32(0x10); key <= 0x17; key++ {
+			if index, ok := x[0x41abe9+key]; !ok || index == 0xffffff {
+				absent = append(absent, key)
+				continue
+			}
+			record, err := decodeDescriptor(key)
+			if err != nil {
+				return err
+			}
+			records = append(records, record)
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]any{"image_sha256": hash, "gate_descriptors": records, "absent_keys": absent,
+			"default_scope": "Serialized ROM descriptor field 3 only; effective boot/runtime defaults, processing semantics and physical calibration are not established."})
+	}
 	if eqDescriptors {
 		starts := [...]uint32{0x126, 0xf8, 0x113, 0x129, 0x116, 0x11d, 0x12c, 0x120, 0x109, 0x12f, 0xf5, 0x10c}
 		var records []eqControl
 		for band, start := range starts {
 			for field, name := range []string{"Frequency", "Gain", "Width"} {
 				key := start + uint32(field)
-				index, ok := x[0x41abe9+key]
-				if !ok || index == 0xffffff {
-					return fmt.Errorf("missing EQ key %03X", key)
+				record, err := decodeDescriptor(key)
+				if err != nil {
+					return err
 				}
-				address := uint32(0x41a391) + 8*index
-				row := make([]uint32, 8)
-				for i := range row {
-					value, ok := x[address+uint32(i)]
-					if !ok {
-						return fmt.Errorf("missing EQ descriptor word")
-					}
-					row[i] = value
-				}
-				if row[4] != key {
-					return fmt.Errorf("EQ descriptor key mismatch")
-				}
-				route := x[0x427441+(row[6]&0xffff)]
-				if route>>22 != 0 {
-					return fmt.Errorf("unrecognized EQ dispatch class")
-				}
-				slot := (route >> 10) & 0xfff
-				pair := [2]uint32{x[0x427536+2*slot], x[0x427537+2*slot]}
-				callback := x[0x427526+(pair[1]&255)]
-				records = append(records, eqControl{band + 1, name, control{key, index, slot, callback, pair[0] & 0xffff,
-					(pair[1] >> 8) & 255, route & 1023, signed(row[0]), signed(row[2]), signed(row[3]), row, pair}})
+				records = append(records, eqControl{band + 1, name, record})
 			}
 		}
 		enc := json.NewEncoder(os.Stdout)
