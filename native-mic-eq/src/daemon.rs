@@ -502,6 +502,12 @@ mod tests {
             before[3]["makeup_gain"] == values[10] && before[4] == values[1],
             "Stock makeup/intensity cache differs from actual DSP values; stop before saving"
         );
+        for (field, index) in [("ratio", 6), ("threshold", 7), ("attack", 8), ("release", 9)] {
+            ensure!(
+                before[3][field] == values[index],
+                "Stock compressor {field} cache differs from DSP; loading a profile would lose the live value"
+            );
+        }
         let check = |devices: &[Live], name: &str, expected: [i32; 11]| -> Result<()> {
             ensure!(
                 devices.len() == 1
