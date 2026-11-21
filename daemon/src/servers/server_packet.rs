@@ -61,6 +61,50 @@ pub async fn handle_packet(
             Ok(DaemonResponse::Ok)
         }
 
+        DaemonRequest::ReadArmDiagnostic(serial, metric) => {
+            let (tx, rx) = oneshot::channel();
+            usb_tx.send(DeviceCommand::ReadArmDiagnostic(serial, metric, tx)).await
+                .map_err(|e| anyhow!(e.to_string()))
+                .context("Could not communicate with the GoXLR device")?;
+            Ok(DaemonResponse::ArmDiagnostic(rx.await.context("Could not read ARM diagnostic")??))
+        }
+        DaemonRequest::ReadDynamicsParameter(serial, control) => {
+            let (tx, rx) = oneshot::channel();
+            usb_tx
+                .send(DeviceCommand::ReadDynamicsParameter(serial, control, tx))
+                .await
+                .map_err(|e| anyhow!(e.to_string()))
+                .context("Could not communicate with the GoXLR device")?;
+            Ok(DaemonResponse::DynamicsParameter(
+                rx.await.context("Could not read DSP dynamics")??,
+            ))
+        }
+        DaemonRequest::ReadMicEqParameter(serial, band, field) => {
+            let (tx, rx) = oneshot::channel();
+            usb_tx
+                .send(DeviceCommand::ReadMicEqParameter(serial, band, field, tx))
+                .await
+                .map_err(|e| anyhow!(e.to_string()))
+                .context("Could not communicate with the GoXLR device")?;
+            Ok(DaemonResponse::MicEqParameter(
+                rx.await.context("Could not read the DSP EQ parameter")??,
+            ))
+        }
+
+        DaemonRequest::ReadRecoveryPartition(serial, partition, offset, length) => {
+            let (tx, rx) = oneshot::channel();
+            usb_tx
+                .send(DeviceCommand::ReadRecoveryPartition(
+                    serial, partition, offset, length, tx,
+                ))
+                .await
+                .map_err(|error| anyhow!(error.to_string()))?;
+            Ok(DaemonResponse::RecoveryPartition(
+                rx.await
+                    .context("Device task closed during recovery read")??,
+            ))
+        }
+
         DaemonRequest::RunFirmwareUpdate(serial, path, force) => {
             let (tx, rx) = oneshot::channel();
             usb_tx

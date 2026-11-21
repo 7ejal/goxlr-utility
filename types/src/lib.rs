@@ -598,6 +598,113 @@ pub enum EqFrequencies {
     Equalizer16KHz,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u16)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum MicEqField {
+    Frequency,
+    Gain,
+    Width,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum DynamicsControl {
+    DeesserEnabled,
+    DeesserAmount,
+    DeesserAttack,
+    DeesserRelease,
+    DeesserMode,
+    DeesserScalar,
+    CompressorRatio,
+    CompressorThreshold,
+    CompressorAttack,
+    CompressorRelease,
+    CompressorMakeup,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u16)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ArmDiagnostic {
+    CpuAudioBit22Count = 1,
+    CpuAudioBit23Count = 2,
+    EffectRingCapacity = 3,
+    EffectRingBuffer = 4,
+    EffectRingUsed = 5,
+    SchedulerTickLow = 6,
+}
+
+impl DynamicsControl {
+    pub const ALL: [Self; 11] = [
+        Self::DeesserEnabled,
+        Self::DeesserAmount,
+        Self::DeesserAttack,
+        Self::DeesserRelease,
+        Self::DeesserMode,
+        Self::DeesserScalar,
+        Self::CompressorRatio,
+        Self::CompressorThreshold,
+        Self::CompressorAttack,
+        Self::CompressorRelease,
+        Self::CompressorMakeup,
+    ];
+
+    pub fn key(self) -> u16 {
+        match self {
+            Self::DeesserEnabled => 0x0a,
+            Self::DeesserAmount => 0x0b,
+            Self::DeesserAttack => 0x0c,
+            Self::DeesserRelease => 0x0d,
+            Self::DeesserMode => 0x0e,
+            Self::DeesserScalar => 0x0f,
+            Self::CompressorRatio => 0x13c,
+            Self::CompressorThreshold => 0x13d,
+            Self::CompressorAttack => 0x13e,
+            Self::CompressorRelease => 0x13f,
+            Self::CompressorMakeup => 0x140,
+        }
+    }
+
+    pub fn range(self) -> std::ops::RangeInclusive<i32> {
+        match self {
+            Self::DeesserEnabled => 0..=1,
+            Self::DeesserMode => 0..=2,
+            Self::DeesserAmount | Self::DeesserScalar => 0..=100,
+            Self::DeesserAttack
+            | Self::DeesserRelease
+            | Self::CompressorAttack
+            | Self::CompressorRelease => 0..=19,
+            Self::CompressorRatio => 0..=14,
+            Self::CompressorThreshold => -50..=0,
+            Self::CompressorMakeup => 0..=24,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum RecoveryPartition {
+    Boot2,
+    Golden,
+}
+
+impl RecoveryPartition {
+    pub fn flash_index(self) -> u32 {
+        match self {
+            Self::Boot2 => 0,
+            Self::Golden => 2,
+        }
+    }
+
+    pub fn length(self) -> u32 {
+        match self {
+            Self::Boot2 => 0x10000,
+            Self::Golden => 0xd0000,
+        }
+    }
+}
+
 impl EqFrequencies {
     pub fn bandwidth_key(self) -> EffectKey {
         match self {

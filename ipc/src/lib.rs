@@ -25,6 +25,10 @@ pub enum DaemonRequest {
     GetStatus,
     Daemon(DaemonCommand),
     GetMicLevel(String),
+    ReadMicEqParameter(String, u8, goxlr_types::MicEqField),
+    ReadDynamicsParameter(String, goxlr_types::DynamicsControl),
+    ReadArmDiagnostic(String, goxlr_types::ArmDiagnostic),
+    ReadRecoveryPartition(String, goxlr_types::RecoveryPartition, u32, u32),
     Command(String, GoXLRCommand),
     RunFirmwareUpdate(String, Option<PathBuf>, bool),
     ContinueFirmwareUpdate(String),
@@ -37,6 +41,10 @@ pub enum DaemonResponse {
     Ok,
     Error(String),
     MicLevel(f64),
+    MicEqParameter(i32),
+    DynamicsParameter(i32),
+    ArmDiagnostic(u32),
+    RecoveryPartition(Vec<u8>),
     Status(DaemonStatus),
     Patch(Patch),
 }
@@ -162,6 +170,19 @@ pub enum GoXLRCommand {
     SetEqGain(EqFrequencies, i8),
     SetEqFreq(EqFrequencies, f32),
     SetMicEqBandwidth(EqFrequencies, u8, String),
+    SetMicEqParameter {
+        band: u8,
+        field: goxlr_types::MicEqField,
+        raw: i32,
+        expected_raw: i32,
+        profile_name: String,
+    },
+    SetDynamicsParameter {
+        control: goxlr_types::DynamicsControl,
+        raw: i32,
+        expected_raw: i32,
+        profile_name: String,
+    },
 
     // Gate Settings
     SetGateThreshold(i8),

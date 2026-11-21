@@ -200,6 +200,30 @@ async fn websocket(
                                                         data: DaemonResponse::MicLevel(level),
                                                     })
                                                 }
+                                                DaemonResponse::MicEqParameter(raw) => {
+                                                    WsResponse(WebsocketResponse {
+                                                        id: request_id,
+                                                        data: DaemonResponse::MicEqParameter(raw),
+                                                    })
+                                                }
+                                                DaemonResponse::DynamicsParameter(raw) => {
+                                                    WsResponse(WebsocketResponse {
+                                                        id: request_id,
+                                                        data: DaemonResponse::DynamicsParameter(raw),
+                                                    })
+                                                }
+                                                DaemonResponse::ArmDiagnostic(value) => {
+                                                    WsResponse(WebsocketResponse {
+                                                        id: request_id,
+                                                        data: DaemonResponse::ArmDiagnostic(value),
+                                                    })
+                                                }
+                                                DaemonResponse::RecoveryPartition(data) => {
+                                                    WsResponse(WebsocketResponse {
+                                                        id: request_id,
+                                                        data: DaemonResponse::RecoveryPartition(data),
+                                                    })
+                                                }
                                                 _ => {
                                                     // This should never fucking happen
                                                     break Some(CloseReason {

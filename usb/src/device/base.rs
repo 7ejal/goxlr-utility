@@ -47,6 +47,62 @@ pub trait ExecutableGoXLR {
 
 // These are commands that can be executed, but perform_request must be implemented..
 pub trait GoXLRCommands: ExecutableGoXLR {
+    fn read_recovery_partition(
+        &mut self,
+        partition: goxlr_types::RecoveryPartition,
+        offset: u32,
+        length: u32,
+    ) -> Result<Vec<u8>> {
+        if length == 0
+            || length > 1024
+            || offset
+                .checked_add(length)
+                .is_none_or(|end| end > partition.length())
+        {
+            bail!("Recovery partition read is out of bounds");
+        }
+        let mut request = [0; 12];
+        LittleEndian::write_u32(&mut request[..4], partition.flash_index());
+        LittleEndian::write_u32(&mut request[4..8], offset);
+        LittleEndian::write_u32(&mut request[8..], length);
+        let reply = self.request_data(Command::ReadRecoveryPartition, &request)?;
+        if reply.len() != length as usize {
+            bail!("Recovery partition read returned an unexpected length");
+        }
+        Ok(reply)
+    }
+
+    fn submit_eq_read(&mut self, parameter: crate::experimental_eq::EqParameter) -> Result<()> {
+        let reply = self.request_data(Command::SubmitEqRead, &parameter.read_request())?;
+        match reply.as_slice() {
+            [0] => Ok(()),
+            [2] => bail!("EQ bridge is busy"),
+            [4] => bail!("EQ bridge requires readback resynchronization"),
+            _ => bail!("EQ bridge rejected the read request"),
+        }
+    }
+
+    fn read_arm_diagnostic(&mut self, metric: goxlr_types::ArmDiagnostic) -> Result<u32> {
+        let reply = self.request_data(Command::ReadArmDiagnostic, &(metric as u16).to_le_bytes())?;
+        crate::experimental_eq::arm_diagnostic_reply(metric, &reply)
+    }
+
+    fn poll_eq_read(
+        &mut self,
+        parameter: crate::experimental_eq::EqParameter,
+    ) -> Result<crate::experimental_eq::EqReadback> {
+        parameter.poll_reply(&self.request_data(Command::PollEqRead, &[])?)
+    }
+
+    fn set_eq_parameter(
+        &mut self,
+        parameter: crate::experimental_eq::EqParameter,
+        raw: i32,
+    ) -> Result<()> {
+        self.request_data(Command::SetEffectParameters, &parameter.effect_write(raw)?)?;
+        Ok(())
+    }
+
     fn supports_dcp_category(&mut self, category: DCPCategory) -> Result<bool> {
         let mut out = [0; 2];
         LittleEndian::write_u16(&mut out, category.id());

@@ -44,6 +44,25 @@ pub enum DeviceCommand {
     RunDaemonCommand(DaemonCommand, oneshot::Sender<Result<()>>),
     RunDeviceCommand(String, GoXLRCommand, oneshot::Sender<Result<()>>),
     GetDeviceMicLevel(String, oneshot::Sender<Result<f64>>),
+    ReadRecoveryPartition(
+        String,
+        goxlr_types::RecoveryPartition,
+        u32,
+        u32,
+        oneshot::Sender<Result<Vec<u8>>>,
+    ),
+    ReadMicEqParameter(
+        String,
+        u8,
+        goxlr_types::MicEqField,
+        oneshot::Sender<Result<i32>>,
+    ),
+    ReadDynamicsParameter(
+        String,
+        goxlr_types::DynamicsControl,
+        oneshot::Sender<Result<i32>>,
+    ),
+    ReadArmDiagnostic(String, goxlr_types::ArmDiagnostic, oneshot::Sender<Result<u32>>),
     RunFirmwareUpdate(String, Option<PathBuf>, bool, oneshot::Sender<Result<()>>),
     ContinueFirmwareUpdate(String, oneshot::Sender<Result<()>>),
     ClearFirmwareState(String, oneshot::Sender<Result<()>>),
@@ -519,6 +538,40 @@ pub async fn spawn_usb_handler(
                         }
                     },
 
+                    DeviceCommand::ReadRecoveryPartition(serial, partition, offset, length, sender) => {
+                        let result = if let Some(device) = devices.get_mut(&serial) {
+                            device.read_recovery_partition(partition, offset, length)
+                        } else {
+                            Err(anyhow!("Device {} is not connected", serial))
+                        };
+                        let _ = sender.send(result);
+                    },
+
+                    DeviceCommand::ReadMicEqParameter(serial, band, field, sender) => {
+                        let result = if let Some(device) = devices.get_mut(&serial) {
+                            device.read_mic_eq_parameter(band, field).await
+                        } else {
+                            Err(anyhow!("Device {} is not connected", serial))
+                        };
+                        let _ = sender.send(result);
+                    },
+
+                    DeviceCommand::ReadDynamicsParameter(serial, control, sender) => {
+                        let result = if let Some(device) = devices.get_mut(&serial) {
+                            device.read_dynamics_parameter(control).await
+                        } else {
+                            Err(anyhow!("Device {} is not connected", serial))
+                        };
+                        let _ = sender.send(result);
+                    },
+                    DeviceCommand::ReadArmDiagnostic(serial, metric, sender) => {
+                        let result = if let Some(device) = devices.get_mut(&serial) {
+                            device.read_arm_diagnostic(metric)
+                        } else {
+                            Err(anyhow!("Device {} is not connected", serial))
+                        };
+                        let _ = sender.send(result);
+                    },
                     DeviceCommand::RunFirmwareUpdate(serial, file, force, sender) => {
                         let mut start_update = true;
                         if let Some(device) = devices.get_mut(&serial) {

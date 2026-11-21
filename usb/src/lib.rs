@@ -8,6 +8,7 @@ pub mod commands;
 pub mod dcp;
 pub mod devices;
 pub mod error;
+pub mod experimental_eq;
 pub mod microphone;
 pub mod routing;
 

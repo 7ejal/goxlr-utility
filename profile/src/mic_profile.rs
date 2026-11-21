@@ -283,6 +283,64 @@ mod mic_eq_bandwidth_tests {
     use super::*;
 
     #[test]
+    fn native_eq_profile_round_trips_all_fields_and_legacy_edits_clear_overrides() {
+        let mut profile = MicProfileSettings::load(
+            b"<MicProfileTree><dspTreeMicProfile/></MicProfileTree>".as_slice(),
+        )
+        .unwrap();
+        let mut xml = Vec::new();
+        profile.write_to(&mut xml).unwrap();
+        assert!(!String::from_utf8_lossy(&xml).contains("GOXLR_UTILITY_MIC_EQ_NATIVE"));
+        for band in 0..12 {
+            for (field, raw) in [120 + band as i32, -6 + band as i32, band as i32 * 2]
+                .into_iter()
+                .enumerate()
+            {
+                profile
+                    .equalizer_mut()
+                    .set_native_parameter(band, field, raw)
+                    .unwrap();
+            }
+        }
+        xml.clear();
+        profile.write_to(&mut xml).unwrap();
+        let mut recovered = MicProfileSettings::load(xml.as_slice()).unwrap();
+        assert_eq!(
+            recovered.equalizer().native_parameters(),
+            profile.equalizer().native_parameters()
+        );
+        recovered.equalizer_mut().set_eq_1k_freq(1500.).unwrap();
+        recovered.equalizer_mut().set_eq_1k_gain(3).unwrap();
+        recovered.equalizer_mut().set_bandwidth(5, 24).unwrap();
+        assert_eq!(
+            &recovered.equalizer().native_parameters()[15..18],
+            &[None; 3]
+        );
+        assert_eq!(
+            &recovered.equalizer().native_parameters()[30..],
+            &profile.equalizer().native_parameters()[30..]
+        );
+        xml.clear();
+        recovered.write_to(&mut xml).unwrap();
+        let loaded = MicProfileSettings::load(xml.as_slice()).unwrap();
+        assert_eq!(
+            loaded.equalizer().native_parameters(),
+            recovered.equalizer().native_parameters()
+        );
+        assert_eq!(loaded.equalizer().eq_1k_freq(), 1500.);
+        assert_eq!(loaded.equalizer().bandwidth()[5], 24);
+        for (index, value) in [(0, "241"), (1, "-13"), (2, "33")] {
+            let mut values = vec!["_"; 36];
+            values[index] = value;
+            let bad = format!(
+                "<MicProfileTree><dspTreeMicProfile GOXLR_UTILITY_MIC_EQ_NATIVE=\"{}\"/></MicProfileTree>",
+                values.join(",")
+            );
+            assert!(MicProfileSettings::load(bad.as_bytes()).is_err());
+        }
+    }
+
+    #[test]
     fn microphone_profile_bandwidth_round_trips_with_legacy_defaults() {
         const ATTRIBUTE: &str = "GOXLR_UTILITY_MIC_EQ_BANDWIDTH";
         let mut profile = MicProfileSettings::load(

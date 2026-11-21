@@ -13,6 +13,10 @@ pub enum Command {
     SetRouting(InputDevice),
     SetButtonStates(),
     SetEffectParameters,
+    SubmitEqRead,
+    PollEqRead,
+    ReadArmDiagnostic,
+    ReadRecoveryPartition,
     SetMicrophoneParameters,
     GetMicrophoneLevel,
     SetColourMap(),
@@ -52,6 +56,10 @@ impl Command {
             Command::GetMicrophoneLevel => 0x80c << 12,
             Command::SetMicrophoneParameters => 0x80b << 12,
             Command::SetEffectParameters => 0x801 << 12,
+            Command::SubmitEqRead => crate::experimental_eq::SUBMIT_COMMAND,
+            Command::PollEqRead => crate::experimental_eq::POLL_COMMAND,
+            Command::ReadArmDiagnostic => 0x0081_9002,
+            Command::ReadRecoveryPartition => 0x004005,
 
             // Animation Related Commands
             Command::SetAnimationMode => 0x816 << 12,
