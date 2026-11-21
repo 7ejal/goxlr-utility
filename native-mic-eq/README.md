@@ -67,16 +67,16 @@ requires all 36 original values after every tested band.
 ## Headphone and dynamics research
 
 See [the 2026-11-20 installation, validation and feature status](DEVELOPMENT-STATUS.md)
-and [the stock noise-gate audit](NOISE-GATE.md). Firmware 909 remains active;
-the [910 diagnostics candidate](FIRMWARE-910.md) is not authorized to flash.
+and [the stock noise-gate audit](NOISE-GATE.md). The exact authorized
+[910 diagnostics image](FIRMWARE-910.md) is active; 909 remains backed up.
 
 See [the current evidence and blocked integration gates](HEADPHONE-DYNAMICS.md)
 for headphone-only EQ and the offline stock compressor/de-esser control lab.
 
 The [909 dynamics bridge](FIRMWARE-909.md) extends this same native app and
 transport. All 47 fields passed physical live write/read/restoration checks.
-Calibrated compressor/de-esser audio response is still pending, so dynamics
-edits remain disabled in the GUI. The capability panel distinguishes verified
+On 910, physically checked makeup and de-esser intensity edits are enabled;
+other dynamics remain disabled pending acoustic calibration. The panel separates
 readback from unmeasured processing, routing and performance features. It never
 displays estimated DSP load or fabricated gain-reduction meters.
 
@@ -102,7 +102,9 @@ settings; the app verifies that saving did not change the live DSP snapshot or
 stock microphone settings. Load choices come from the daemon's actual profile
 list and loading is an explicit action. Profile operations are disabled on
 unvalidated firmware. This does not make the stock profile format persist all
-11 advanced raw dynamics fields; portable 47-field exports remain separate.
+nine remaining research dynamics fields. Makeup and intensity now update the
+profile cache after DSP confirmation and passed actual Save As/load checks.
+Portable 47-field exports remain separate.
 
 The optional Windows spectrum view records the exact Chat Mic endpoint, without
 playing audio or changing its configuration. It shows a 2048-sample Hann FFT and
@@ -116,13 +118,13 @@ from device underruns.
 
 Open **Portable presets** in the same native app. Refresh the device, enter a
 display name and JSON file path, then choose **Export new file**. This saves the
-last complete 909 DSP snapshot as exact raw integers, including all 36 EQ and 11
+last complete 909/910 DSP snapshot as exact raw integers, including all 36 EQ and 11
 dynamics fields. It never overwrites an existing file. Device serial numbers and
 profile names are excluded.
 
 **Import preview** reads and validates the file, then compares every imported
 value with the last live snapshot. Import works without a connected device;
-comparison requires a complete 909 snapshot. Import never writes hardware.
+comparison requires a complete 909/910 snapshot. Import never writes hardware.
 **Apply preset** remains disabled pending complete processing validation.
 
 Files use UTF-8 JSON format `goxlr-native-raw47`, version 1, with exact units per
@@ -167,4 +169,14 @@ serialized full-kernel tests produced identical output at 0, 1 and 2, including
 measurable reduction in the 8 kHz fixture. Intensity zero is not bypass.
 Disabling gain reduction targets unity through a 64-sample transition while
 the detector continues running. It is not an instant bit-exact dry or workload
-bypass. These are native-code test results; acoustic calibration remains pending.
+bypass. Physical intensity checks measured −9.09 dB at 8 kHz, +0.01 dB at 1 kHz
+and −1.50 dB at 2 kHz in the documented fixture; this is not a calibrated filter
+transfer function or full timing calibration. See DEVELOPMENT-STATUS.md.
+
+## Live ARM diagnostics
+
+The optional native 1 Hz panel displays six verified 910 ARM readings with stale,
+profile and ring-metadata guards. These are event counts, communication-ring
+address/capacity/occupancy and native ticks, not DSP clock/load, free cycles,
+heap, stack or overrun measurements. The original DSP clock cache is itself an
+assumed-reference calculation; see [the serialized clock audit](DSP-CLOCK-CACHE.md).

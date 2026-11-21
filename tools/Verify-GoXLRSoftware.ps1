@@ -5,7 +5,8 @@ param(
     [string]$InstalledDaemon = 'C:/Program Files/GoXLR Utility/goxlr-daemon.exe',
     [string]$Application = 'C:/Users/real5/Documents/ChatGPT/Goxlr/GoXLR-Native-Mic-EQ/GoXLR-Native-Mic-EQ.exe',
     [Parameter(Mandatory)][string]$DaemonSha256,
-    [Parameter(Mandatory)][string]$ApplicationSha256
+    [Parameter(Mandatory)][string]$ApplicationSha256,
+    [ValidateSet(909,910)][int]$ExpectedBuild = 909
 )
 $ErrorActionPreference = 'Stop'
 $InstalledDaemon = (Resolve-Path -LiteralPath $InstalledDaemon).Path
@@ -31,7 +32,7 @@ if ($devices.Count -ne 1) { throw 'Expected exactly one GoXLR.' }
 $serial = $devices[0].Name
 $mixer = $devices[0].Value
 $original = $before.mixers.$serial
-if (!$original -or ($mixer.hardware.versions.firmware -join '.') -ne '1.5.1.909' -or
+if (!$original -or ($mixer.hardware.versions.firmware -join '.') -ne "1.5.1.$ExpectedBuild" -or
     $mixer.mic_profile_name -ne '4' -or $mixer.mic_status.noise_gate.threshold -ne -52 -or
     (Compare-Object @(SettingLeaves $mixer.mic_status | Sort-Object) @(SettingLeaves $original.mic_status | Sort-Object))) {
     throw 'Firmware, profile or stock microphone settings differ from the preserved baseline.'
@@ -48,6 +49,8 @@ foreach ($field in (Get-Content -LiteralPath (Join-Path $BackupDirectory 'dynami
     $count++
 }
 if ($count -ne 47) { throw 'Incomplete baseline.' }
-$diagnostic = Request @{ ReadArmDiagnostic = @($serial, 'CpuAudioBit22Count') }
-if ($diagnostic.Error -notmatch '910') { throw '909 did not reject the 910-only diagnostic.' }
-'PASS installed executable hashes and running processes; firmware 909, profile 4, gate -52 dB, stock mic settings and all 47 DSP values preserved; 910-only diagnostics rejected.'
+if ($ExpectedBuild -eq 909) {
+    $diagnostic = Request @{ ReadArmDiagnostic = @($serial, 'CpuAudioBit22Count') }
+    if ($diagnostic.Error -notmatch '910') { throw '909 did not reject the 910-only diagnostic.' }
+}
+"PASS installed executable hashes and running processes; firmware $ExpectedBuild, profile 4, gate -52 dB, stock mic settings and all 47 DSP values preserved."

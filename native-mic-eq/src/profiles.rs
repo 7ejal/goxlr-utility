@@ -136,6 +136,8 @@ mod tests {
         assert!(command(&expected, &changed, &Action::Save).is_err());
         changed = expected.clone();
         changed.firmware = daemon::ARM_DIAGNOSTICS_FIRMWARE.into();
+        assert!(command(&changed, &changed, &Action::Save).is_ok());
+        changed.firmware = "1.5.1.911".into();
         assert!(command(&changed, &changed, &Action::Save).is_err());
     }
 }

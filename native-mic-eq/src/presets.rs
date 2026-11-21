@@ -14,6 +14,14 @@ use std::{
 const FORMAT: &str = "goxlr-native-raw47";
 const MAX_FILE_BYTES: usize = 64 * 1024;
 
+pub fn supports_firmware(firmware: &str) -> bool {
+    [
+        crate::daemon::DYNAMICS_FIRMWARE,
+        crate::daemon::ARM_DIAGNOSTICS_FIRMWARE,
+    ]
+    .contains(&firmware)
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Preset {
@@ -42,8 +50,8 @@ pub struct Change {
 impl Preset {
     pub fn from_live(name: String, live: &Live) -> Result<Self> {
         ensure!(
-            live.firmware == crate::daemon::DYNAMICS_FIRMWARE,
-            "A complete 909 DSP snapshot is required"
+            supports_firmware(&live.firmware),
+            "A complete 909/910 DSP snapshot is required"
         );
         let dynamics = live
             .dynamics
@@ -91,7 +99,7 @@ impl Preset {
             "Unsupported preset format or version"
         );
         ensure!(
-            self.source_firmware == crate::daemon::DYNAMICS_FIRMWARE,
+            supports_firmware(&self.source_firmware),
             "Unsupported source firmware"
         );
         ensure!(
@@ -194,14 +202,17 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "Requires the attached 909 device; reads all 47 fields and verifies the preset codec without hardware writes"]
+    #[ignore = "Requires the attached 909/910 device; reads all 47 fields and verifies the preset codec without hardware writes"]
     async fn native_live_preset_snapshot() -> Result<()> {
         let devices = crate::daemon::read().await?;
         ensure!(
-            devices.len() == 1 && devices[0].firmware == crate::daemon::DYNAMICS_FIRMWARE,
-            "Exactly one 909 device is required"
+            devices.len() == 1 && supports_firmware(&devices[0].firmware),
+            "Exactly one 909/910 device is required"
         );
-        let preset = Preset::from_live("Live 909 snapshot".into(), &devices[0])?;
+        let preset = Preset::from_live(
+            format!("Live {} snapshot", devices[0].firmware),
+            &devices[0],
+        )?;
         let bytes = serde_json::to_vec(&preset)?;
         let imported: Preset = serde_json::from_slice(&bytes)?;
         imported.validate()?;
@@ -215,7 +226,8 @@ mod tests {
             imported.save_new(Path::new(&path))?;
         }
         println!(
-            "PASS actual 909 snapshot: 47 raw fields exported/imported exactly; no hardware writes"
+            "PASS actual {} snapshot: 47 raw fields exported/imported exactly; no hardware writes",
+            devices[0].firmware
         );
         Ok(())
     }
@@ -272,22 +284,33 @@ mod tests {
     #[test]
     fn live_export_preserves_every_frequency_selector_and_preview_does_not_modify_it() -> Result<()>
     {
-        for raw in 0..=240 {
-            let live = live(raw);
-            let mut preset = Preset::from_live("Portable".into(), &live)?;
-            for band in 0..12 {
-                assert_eq!(preset.parameters[band * 3].raw, raw);
+        for firmware in [
+            crate::daemon::DYNAMICS_FIRMWARE,
+            crate::daemon::ARM_DIAGNOSTICS_FIRMWARE,
+        ] {
+            for raw in 0..=240 {
+                let mut live = live(raw);
+                live.firmware = firmware.into();
+                let mut preset = Preset::from_live("Portable".into(), &live)?;
+                assert_eq!(preset.source_firmware, firmware);
+                for band in 0..12 {
+                    assert_eq!(preset.parameters[band * 3].raw, raw);
+                }
+                assert!(preset.changes(&live)?.is_empty());
+                preset.parameters[1].raw += 1;
+                let changes = preset.changes(&live)?;
+                assert_eq!(changes.len(), 1);
+                assert_eq!(changes[0].before, -3);
+                assert_eq!(changes[0].after, -2);
+                assert_eq!(live.bands[0].gain, -3);
+                let json = serde_json::to_string(&preset)?;
+                let imported: Preset = serde_json::from_str(&json)?;
+                imported.validate()?;
+                assert_eq!(imported.source_firmware, firmware);
+                assert_eq!(imported, preset);
+                assert!(!json.contains("private-device-name"));
+                assert!(!json.contains("private-profile-name"));
             }
-            assert!(preset.changes(&live)?.is_empty());
-            preset.parameters[1].raw += 1;
-            let changes = preset.changes(&live)?;
-            assert_eq!(changes.len(), 1);
-            assert_eq!(changes[0].before, -3);
-            assert_eq!(changes[0].after, -2);
-            assert_eq!(live.bands[0].gain, -3);
-            let json = serde_json::to_string(&preset)?;
-            assert!(!json.contains("private-device-name"));
-            assert!(!json.contains("private-profile-name"));
         }
         Ok(())
     }
@@ -338,7 +361,7 @@ mod tests {
         preset.version = 2;
         assert!(preset.validate().is_err());
         let mut preset = fixture();
-        preset.source_firmware = "1.5.1.910".into();
+        preset.source_firmware = "1.5.1.911".into();
         assert!(preset.validate().is_err());
         let mut value = serde_json::to_value(fixture())?;
         value["command"] = serde_json::json!("SetGateThreshold");

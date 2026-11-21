@@ -32,6 +32,7 @@ public static class MicFixture {
     [DllImport("winmm.dll")] static extern uint waveOutClose(IntPtr h);
     static double[] tones = {700, 1000, 1500, 2300};
     public static void SetTones(double[] frequencies) { tones = frequencies; }
+    public static uint LoopCount = 28;
     static void Check(uint result) { if (result != 0) throw new Exception("waveOut error " + result); }
     public static IDisposable Start(string endpoint, double amplitude) { return Start(endpoint, amplitude, false); }
     public static IDisposable Start(string endpoint, double amplitude, bool splitStereo) {
@@ -69,7 +70,7 @@ public static class MicFixture {
             try {
                 pin = GCHandle.Alloc(samples, GCHandleType.Pinned);
                 header = Marshal.AllocHGlobal((int)size);
-                Marshal.StructureToPtr(new Header { data=pin.AddrOfPinnedObject(), size=(uint)samples.Length*2, flags=12, loops=28 }, header, false);
+                Marshal.StructureToPtr(new Header { data=pin.AddrOfPinnedObject(), size=(uint)samples.Length*2, flags=12, loops=LoopCount }, header, false);
                 Check(waveOutPrepareHeader(handle, header, size));
                 prepared = true;
                 Check(waveOutWrite(handle, header, size));

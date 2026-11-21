@@ -133,7 +133,7 @@ pub fn dynamics_parameter(control: DynamicsControl) -> Parameter {
         CompressorMakeup => (
             "Compressor makeup",
             4,
-            "Makeup gain in dB, stored internally in signed logarithmic form",
+            "Manual makeup gain in dB. An internal automatic mode can recompute gain after threshold/ratio changes; that mode is not read back",
             0x34519,
         ),
     };

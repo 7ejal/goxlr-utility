@@ -1,6 +1,6 @@
-# 910 bounded ARM diagnostics — offline validated, not authorized to flash
+# 910 bounded ARM diagnostics — authorized and physically enumerated
 
-909 remains the preserved, physically validated baseline. This candidate adds
+909 remains preserved as a rollback image. The exact authorized 910 image adds
 read-only ARM telemetry. It adds no DSP processing and does not measure DSP
 clock, utilization, free cycles, memory or audio latency.
 
@@ -73,12 +73,19 @@ overrun/underrun counters, cycle counters or DSP load indicators.
 - USB framing and typed host transport tests preserve full unsigned values.
   The host rejects non-910 devices before sending a diagnostic command.
 
-No physical 910 boot or telemetry collection has occurred. Native parameter
-editing stays disabled on unvalidated 910, while the daemon preserves native
-EQ profile replay and permits readback for the diagnostic test. A matching
-910-aware daemon is required before updating; the working 909 daemon/app,
-profiles and recovery images must remain backed up. Existing update scripts
-do not authorize this image. Obtain explicit approval for this exact SHA256.
+The user authorized this exact SHA256; one update completed and 910 enumerated.
+All 47 reversible write/read/raw-restoration checks passed in 197.66 seconds.
+Profile 4, gate -52 dB, all 47 values and stock settings were preserved. Six
+actual ARM metrics were collected. Fresh Boot2/Golden chunks were read twice
+and match preserved hashes; neither recovery partition was written. This does
+not prove every recovery failure mode or physical cache/timing margin.
+
+The installed native app enables only physically checked makeup and de-esser
+intensity on 910. Both update the profile cache after DSP confirmation; actual
+Save As/load tests preserved two edited values, then restored profile 4 and all
+settings. Other dynamics widgets remain disabled. See DEVELOPMENT-STATUS.md.
+No further flash is needed for these software changes. A changed image still
+requires its own explicit authorization.
 
 ## Reproduction
 

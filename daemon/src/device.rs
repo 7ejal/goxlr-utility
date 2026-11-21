@@ -1842,7 +1842,7 @@ impl<'a> Device<'a> {
         length: u32,
     ) -> Result<Vec<u8>> {
         if self.hardware.device_type != DeviceType::Full
-            || !["1.5.1.901", "1.5.1.907", "1.5.1.908", "1.5.1.909"]
+            || !["1.5.1.901", "1.5.1.907", "1.5.1.908", "1.5.1.909", "1.5.1.910"]
                 .contains(&self.hardware.versions.firmware.to_string().as_str())
         {
             bail!("Recovery partition layout has not been traced for this firmware");
@@ -2095,8 +2095,8 @@ impl<'a> Device<'a> {
                 expected_raw,
                 profile_name,
             } => {
-                if self.hardware.versions.firmware.to_string() != "1.5.1.909" {
-                    bail!("Dynamics writes require the physically validated 909 image");
+                if !["1.5.1.909", "1.5.1.910"].contains(&self.hardware.versions.firmware.to_string().as_str()) {
+                    bail!("Dynamics writes require the 909/910 bridge");
                 }
                 let parameter = goxlr_usb::experimental_eq::EqParameter::dynamics(control);
                 parameter.effect_write(raw)?;
@@ -2118,6 +2118,11 @@ impl<'a> Device<'a> {
                         "Dynamics confirmation failed ({confirmation:?}); baseline write result {restoration:?}. Read the device again before further edits"
                     );
                 }
+                match control {
+                    goxlr_types::DynamicsControl::CompressorMakeup => self.mic_profile.set_compressor_makeup(raw as i8)?,
+                    goxlr_types::DynamicsControl::DeesserAmount => self.mic_profile.set_deesser(raw as u8)?,
+                    _ => {}
+                }
             }
             GoXLRCommand::SetMicEqParameter {
                 band,
@@ -2126,8 +2131,8 @@ impl<'a> Device<'a> {
                 expected_raw,
                 profile_name,
             } => {
-                if !["1.5.1.908", "1.5.1.909"].contains(&self.hardware.versions.firmware.to_string().as_str()) {
-                    bail!("Native EQ edits require a physically validated image");
+                if !["1.5.1.908", "1.5.1.909", "1.5.1.910"].contains(&self.hardware.versions.firmware.to_string().as_str()) {
+                    bail!("Native EQ edits require the 908/909/910 bridge");
                 }
                 let parameter =
                     goxlr_usb::experimental_eq::EqParameter::new(usize::from(band), field)?;

@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$BackupDirectory,
     [Parameter(Mandatory)][string]$Firmware908,
     [Parameter(Mandatory)][string]$Firmware909,
-    [ValidateSet(908,909)][int]$BaselineBuild = 908,
+    [string]$Firmware910,
+    [ValidateSet(908,909,910)][int]$BaselineBuild = 908,
     [string]$ApplicationDirectory = 'C:/Users/real5/Documents/ChatGPT/Goxlr/GoXLR-Native-Mic-EQ',
     [string]$InstalledDaemon = 'C:/Program Files/GoXLR Utility/goxlr-daemon.exe',
     [string]$Endpoint = 'http://127.0.0.1:14564/api/command',
@@ -39,9 +40,12 @@ if ((Get-FileHash $Firmware908).Hash -ne 'C8607989063552E5A412AD3B29B4E1DB355D9B
     throw 'The recorded firmware image hashes do not match.'
 }
 if (Test-Path -LiteralPath $BackupDirectory) { throw 'Choose a new backup directory.' }
+if ($BaselineBuild -eq 910 -and (!$Firmware910 -or (Get-FileHash -LiteralPath $Firmware910).Hash -ne 'B524AC6CF1B937E9C5D224CE9794E807E3B6561652B94DC6B26111FC9EF49744')) {
+    throw 'The approved 910 image is required for a 910 baseline backup.'
+}
 $baseline = @(Snapshot $serial)
 $dynamics = @()
-if ($BaselineBuild -eq 909) {
+if ($BaselineBuild -ge 909) {
     foreach ($control in 'DeesserEnabled','DeesserAmount','DeesserAttack','DeesserRelease','DeesserMode',
         'DeesserScalar','CompressorRatio','CompressorThreshold','CompressorAttack','CompressorRelease','CompressorMakeup') {
         $first = (Request @{ ReadDynamicsParameter = @($serial, $control) }).DynamicsParameter
@@ -54,6 +58,7 @@ if ($DryRun) { 'Would back up original files, capture 36 fields, and save live p
 $backup = (New-Item -ItemType Directory -Path $BackupDirectory).FullName
 Copy-Item -LiteralPath $Firmware908 -Destination (Join-Path $backup 'firmware-908.bin')
 Copy-Item -LiteralPath $Firmware909 -Destination (Join-Path $backup 'firmware-909.bin')
+if ($Firmware910) { Copy-Item -LiteralPath $Firmware910 -Destination (Join-Path $backup 'firmware-910.bin') }
 Copy-Item -LiteralPath $InstalledDaemon -Destination (Join-Path $backup 'goxlr-daemon.exe')
 Copy-Item -LiteralPath (Split-Path $InstalledDaemon) -Destination (Join-Path $backup 'utility-installation') -Recurse
 Copy-Item -LiteralPath $ApplicationDirectory -Destination (Join-Path $backup 'native-application') -Recurse

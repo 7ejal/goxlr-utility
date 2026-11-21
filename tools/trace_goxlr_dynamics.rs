@@ -12,6 +12,9 @@ mod dynamics_kernel;
 #[path = "dynamics_graph_provenance.rs"]
 mod dynamics_graph_provenance;
 
+#[path = "clock_kernel.rs"]
+mod clock_kernel;
+
 const FRAME: u32 = 0x1800;
 const QUEUE: u32 = 0x2000;
 const VALUES: u32 = 0x1200;
@@ -119,6 +122,10 @@ fn main() {
     });
     state.registers[reg::SR] = 0x840300;
     state.registers[reg::OMR] = 0x200000;
+    if env::args().any(|arg| arg == "--clock-kernel") {
+        clock_kernel::run(&mut state, &mut jit, build);
+        return;
+    }
     if env::args().any(|arg| arg == "--graph-provenance") {
         dynamics_graph_provenance::run(&mut state, &mut jit, build);
         return;

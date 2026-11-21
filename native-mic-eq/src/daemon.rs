@@ -16,7 +16,6 @@ pub const VERIFIED_FIRMWARE: &str = "1.5.1.907";
 pub const READBACK_FIRMWARE: &str = "1.5.1.908";
 pub const DYNAMICS_FIRMWARE: &str = "1.5.1.909";
 pub const ARM_DIAGNOSTICS_FIRMWARE: &str = "1.5.1.910";
-pub const DYNAMICS_CONTROLS_VERIFIED: bool = false;
 pub fn has_readback(firmware: &str) -> bool {
     [
         READBACK_FIRMWARE,
@@ -29,7 +28,22 @@ pub fn has_readback(firmware: &str) -> bool {
 pub const NATIVE_CONTROLS_VERIFIED: bool = true;
 
 pub fn native_eq_writes_verified(firmware: &str) -> bool {
-    NATIVE_CONTROLS_VERIFIED && [READBACK_FIRMWARE, DYNAMICS_FIRMWARE].contains(&firmware)
+    NATIVE_CONTROLS_VERIFIED
+        && [
+            READBACK_FIRMWARE,
+            DYNAMICS_FIRMWARE,
+            ARM_DIAGNOSTICS_FIRMWARE,
+        ]
+        .contains(&firmware)
+}
+
+pub fn dynamics_control_verified(firmware: &str, control: goxlr_types::DynamicsControl) -> bool {
+    firmware == ARM_DIAGNOSTICS_FIRMWARE
+        && matches!(
+            control,
+            goxlr_types::DynamicsControl::CompressorMakeup
+                | goxlr_types::DynamicsControl::DeesserAmount
+        )
 }
 
 #[derive(Clone)]
@@ -48,7 +62,7 @@ pub enum Edit {
     Width(u8),
 }
 
-async fn connect() -> Result<IPCClient> {
+pub(crate) async fn connect() -> Result<IPCClient> {
     let name = if cfg!(windows) {
         "@goxlr.socket".to_ns_name::<GenericNamespaced>()?
     } else {
@@ -241,7 +255,7 @@ pub async fn read_mic_activity(expected: ProfileKey) -> Result<f64> {
 pub async fn apply_dynamics(expected: Live, index: usize, raw: i32) -> Result<Vec<Live>> {
     tokio::time::timeout(Duration::from_secs(10), async {
         ensure!(
-            expected.firmware == DYNAMICS_FIRMWARE,
+            [DYNAMICS_FIRMWARE, ARM_DIAGNOSTICS_FIRMWARE].contains(&expected.firmware.as_str()),
             "Dynamics bridge is unavailable"
         );
         let control = *goxlr_types::DynamicsControl::ALL
@@ -447,15 +461,177 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    #[ignore = "Requires authorized physical 910 on profile 4 with gate -52; saves a baseline and lab profile, changes two fields and restores the original"]
+    async fn native_live_dynamics_profile_persistence() -> Result<()> {
+        use crate::profiles::Action;
+
+        async fn stock(key: &ProfileKey) -> Result<serde_json::Value> {
+            let mut client = connect().await?;
+            client.poll_status().await?;
+            let mixer = client
+                .status()
+                .mixers
+                .get(&key.serial)
+                .context("GoXLR disconnected")?;
+            ensure!(
+                mixer.mic_profile_name == key.name
+                    && mixer.hardware.versions.firmware.to_string() == ARM_DIAGNOSTICS_FIRMWARE,
+                "Device or microphone profile changed during persistence validation"
+            );
+            stock_mic_settings(mixer)
+        }
+
+        let devices = read().await?;
+        ensure!(
+            devices.len() == 1
+                && devices[0].firmware == ARM_DIAGNOSTICS_FIRMWARE
+                && devices[0].key.name == "4",
+            "Exactly one authorized 910 device on microphone profile 4 is required"
+        );
+        let baseline = devices[0].clone();
+        let values = baseline
+            .dynamics
+            .context("Missing complete dynamics snapshot")?;
+        let before = stock(&baseline.key).await?;
+        ensure!(
+            before[2]["threshold"] == -52,
+            "The noise gate must remain at -52 dB"
+        );
+        ensure!(
+            before[3]["makeup_gain"] == values[10] && before[4] == values[1],
+            "Stock makeup/intensity cache differs from actual DSP values; stop before saving"
+        );
+        let check = |devices: &[Live], name: &str, expected: [i32; 11]| -> Result<()> {
+            ensure!(
+                devices.len() == 1
+                    && devices[0].key.serial == baseline.key.serial
+                    && devices[0].firmware == baseline.firmware
+                    && devices[0].key.name == name
+                    && devices[0].bands == baseline.bands
+                    && devices[0].dynamics == Some(expected),
+                "Profile {name} did not preserve its complete 47-field snapshot"
+            );
+            Ok(())
+        };
+        // Preserve any unsaved current settings before loading the original profile again.
+        let saved = microphone_profile(baseline.clone(), Action::Save).await?;
+        check(&saved, &baseline.key.name, values)?;
+        let lab_name = format!(
+            "Lab910-Dynamics-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos()
+        );
+        let mut edited = values;
+        for index in [10, 1] {
+            let range = goxlr_types::DynamicsControl::ALL[index].range();
+            edited[index] += if values[index] < *range.end() { 1 } else { -1 };
+        }
+        let mut edited_stock = before.clone();
+        edited_stock[3]["makeup_gain"] = serde_json::json!(edited[10]);
+        edited_stock[4] = serde_json::json!(edited[1]);
+
+        let result: Result<()> = async {
+            let mut current = baseline.clone();
+            for index in [10, 1] {
+                let changed = apply_dynamics(current, index, edited[index]).await?;
+                ensure!(
+                    changed.len() == 1,
+                    "Expected the same single GoXLR after editing"
+                );
+                current = changed[0].clone();
+            }
+            check(std::slice::from_ref(&current), &baseline.key.name, edited)?;
+            ensure!(
+                stock(&current.key).await? == edited_stock,
+                "Confirmed dynamics edits did not update the stock cache"
+            );
+            let lab = microphone_profile(current, Action::SaveAs(lab_name.clone())).await?;
+            check(&lab, &lab_name, edited)?;
+            println!("LAB_PROFILE={lab_name}; retained as persistence evidence");
+            let original =
+                microphone_profile(lab[0].clone(), Action::Load(baseline.key.name.clone())).await?;
+            check(&original, &baseline.key.name, values)?;
+            ensure!(
+                stock(&original[0].key).await? == before,
+                "Original profile stock settings differ"
+            );
+            let lab =
+                microphone_profile(original[0].clone(), Action::Load(lab_name.clone())).await?;
+            check(&lab, &lab_name, edited)?;
+            ensure!(
+                stock(&lab[0].key).await? == edited_stock,
+                "Reloaded lab profile lost makeup/intensity or changed other stock settings"
+            );
+            Ok(())
+        }
+        .await;
+
+        let restoration: Result<()> = async {
+            let current = read().await?;
+            ensure!(current.len() == 1 && current[0].key.serial == baseline.key.serial
+                && current[0].firmware == baseline.firmware
+                && (current[0].key.name == baseline.key.name || current[0].key.name == lab_name),
+                "Unexpected device/profile; refusing to overwrite a user profile change during restoration");
+            let original = microphone_profile(current[0].clone(), Action::Load(baseline.key.name.clone())).await?;
+            check(&original, &baseline.key.name, values)?;
+            ensure!(stock(&original[0].key).await? == before, "Original stock microphone settings were not restored");
+            Ok(())
+        }.await;
+        restoration.with_context(|| {
+            format!("Original profile restoration failed; persistence test result: {result:?}")
+        })?;
+        result.context(
+            "Persistence validation failed; original profile and all 47 fields were restored",
+        )?;
+        println!(
+            "PASS makeup/intensity saved and reloaded; other 45 DSP fields unchanged; profile 4, -52 dB gate and all stock settings restored; lab profile retained"
+        );
+        Ok(())
+    }
+
     #[test]
-    fn diagnostic_derivative_can_read_without_enabling_unvalidated_edits() {
-        for firmware in [READBACK_FIRMWARE, DYNAMICS_FIRMWARE] {
+    fn known_bridge_versions_support_native_eq_writes() {
+        for firmware in [
+            READBACK_FIRMWARE,
+            DYNAMICS_FIRMWARE,
+            ARM_DIAGNOSTICS_FIRMWARE,
+        ] {
             assert!(has_readback(firmware) && native_eq_writes_verified(firmware));
         }
-        assert!(has_readback(ARM_DIAGNOSTICS_FIRMWARE));
-        assert!(!native_eq_writes_verified(ARM_DIAGNOSTICS_FIRMWARE));
         for firmware in ["1.5.1.901", "1.5.1.911", "1.3.31.83", ""] {
             assert!(!has_readback(firmware) && !native_eq_writes_verified(firmware));
+        }
+    }
+
+    #[test]
+    fn only_physically_checked_dynamics_controls_can_be_edited_on_910() {
+        use goxlr_types::DynamicsControl;
+        let enabled: Vec<_> = DynamicsControl::ALL
+            .into_iter()
+            .filter(|&control| dynamics_control_verified(ARM_DIAGNOSTICS_FIRMWARE, control))
+            .collect();
+        assert_eq!(
+            enabled,
+            [
+                DynamicsControl::DeesserAmount,
+                DynamicsControl::CompressorMakeup
+            ]
+        );
+        for firmware in [
+            READBACK_FIRMWARE,
+            DYNAMICS_FIRMWARE,
+            "1.5.1.911",
+            "unknown",
+            "",
+        ] {
+            assert!(
+                DynamicsControl::ALL
+                    .into_iter()
+                    .all(|control| !dynamics_control_verified(firmware, control))
+            );
         }
     }
 
@@ -477,12 +653,14 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires the authorized 909 image; edits and restores all 47 fields"]
+    #[ignore = "Requires the specifically authorized 909/910 image; edits and restores all 47 fields"]
     async fn native_all_parameters_reversible_round_trip() -> Result<()> {
         let devices = read().await?;
         ensure!(
-            devices.len() == 1 && devices[0].firmware == DYNAMICS_FIRMWARE,
-            "Exactly one approved 909 device is required"
+            devices.len() == 1
+                && [DYNAMICS_FIRMWARE, ARM_DIAGNOSTICS_FIRMWARE]
+                    .contains(&devices[0].firmware.as_str()),
+            "Exactly one approved 909/910 device is required"
         );
         let baseline = devices[0].clone();
         let dynamics = baseline.dynamics.context("Missing dynamics snapshot")?;

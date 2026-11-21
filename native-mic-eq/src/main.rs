@@ -5,6 +5,7 @@ mod compressor;
 mod controls;
 mod daemon;
 mod detector;
+mod diagnostics;
 mod model;
 mod presets;
 mod profiles;
@@ -33,6 +34,7 @@ struct App {
     imported_preset: Option<presets::Preset>,
     preset_status: Option<Result<String, String>>,
     mic_activity: activity::Activity,
+    diagnostics: diagnostics::Diagnostics,
     detector_rate: u32,
     mic_profile_selection: String,
     mic_profile_save_as: String,
@@ -110,7 +112,7 @@ impl App {
                     }
                 }
             });
-            if !ready && self.pending.is_none() { ui.weak("Profile operations require verified 908/909 native EQ firmware."); }
+            if !ready && self.pending.is_none() { ui.weak("Profile operations require the supported 908/909/910 native EQ bridge."); }
             if let Some(message) = &self.profile_status { ui.label(message); }
         });
         action
@@ -128,7 +130,7 @@ impl App {
                 ui.text_edit_singleline(&mut self.preset_path);
             });
             let path_ready = !self.preset_path.trim().is_empty() && self.pending.is_none();
-            let export_ready = device.is_some_and(|device| device.firmware == daemon::DYNAMICS_FIRMWARE && device.dynamics.is_some());
+            let export_ready = device.is_some_and(|device| presets::supports_firmware(&device.firmware) && device.dynamics.is_some());
             ui.horizontal(|ui| {
                 if ui.add_enabled(path_ready && export_ready, egui::Button::new("Export new file")).clicked() {
                     self.preset_status = Some(presets::Preset::from_live(self.preset_name.clone(), device.expect("Checked device"))
@@ -178,7 +180,7 @@ impl App {
                         Err(error) => { ui.colored_label(Color32::LIGHT_RED, format!("{error:#}")); }
                     }
                 } else {
-                    ui.label("47 valid fields loaded. Connect 909 and refresh to compare with actual DSP values.");
+                    ui.label("47 valid fields loaded. Connect 909/910 and refresh to compare with actual DSP values.");
                 }
                 ui.add_enabled(false, egui::Button::new("Apply preset"))
                     .on_disabled_hover_text("Preset application requires complete processing validation. Use verified individual controls for now.");
@@ -200,9 +202,9 @@ impl App {
                 "Unrecognized firmware: native hardware writes are disabled."
             });
             ui.label(if device.dynamics.is_some() {
-                "Compressor/de-esser: live read/write/restoration verified on 909; calibrated audio response pending."
+                "All 47 raw fields: live read/write/restoration verified on 909/910. Physical processing checks cover makeup gain and de-esser intensity on 910; remaining dynamics calibration is pending."
             } else {
-                "Advanced dynamics readback requires the exact 909 bridge; no unsupported firmware is probed."
+                "Advanced dynamics readback requires the exact 909/910 bridge; no unsupported firmware is probed."
             });
             egui::Grid::new("hardware-capabilities").striped(true).show(ui, |ui| {
                 for (feature, gate) in [
@@ -213,7 +215,7 @@ impl App {
                     ("Noise gate additions / limiter / processing order", "Additional processing paths unverified"),
                     ("Gain reduction", "No verified live gain-reduction readback"),
                     ("Microphone spectrum", "Optional Windows Chat Mic recording; endpoint levels, not internal DSP levels"),
-                    ("DSP / ARM performance", "No physical clock, utilization or memory telemetry"),
+                    ("DSP performance / ARM free memory", "No physical DSP clock, utilization, free cycles or heap/stack telemetry"),
                 ] {
                     ui.label(feature);
                     ui.weak(gate);
@@ -353,6 +355,7 @@ impl eframe::App for App {
             }
             self.presets(ui, preset_device.as_ref());
             ui.collapsing("Recorded microphone spectrum", |ui| self.spectrum.show(ui, ctx));
+            self.diagnostics.show(ui, ctx, preset_device.as_ref(), self.pending.is_some());
             if let Some(action) = self.microphone_profiles(ui, preset_device.as_ref()) {
                 let expected = preset_device.clone().expect("Profile buttons require a device");
                 self.profile_status = None;
@@ -381,18 +384,21 @@ impl eframe::App for App {
                 if let Some(values) = device.dynamics {
                     ui.collapsing("Compressor static response", |ui| compressor::show(ui, &values));
                     ui.collapsing("De-esser detector response", |ui| detector::show(ui, &mut self.detector_rate));
-                    ui.label("Live settings only; these changes are not saved to a profile.");
-                    if !daemon::DYNAMICS_CONTROLS_VERIFIED {
-                        ui.label("Live read/write verified on 909. Audio response calibration is pending; editing remains disabled.");
-                    }
+                    ui.label("Makeup and intensity edits update the current mic profile; use Save to persist them. Other raw dynamics fields are not saved.");
+                    ui.label(if device.firmware == daemon::ARM_DIAGNOSTICS_FIRMWARE {
+                        "Makeup gain and de-esser intensity passed reversible physical response checks on 910. Other dynamics edits remain disabled pending calibration."
+                    } else {
+                        "Dynamics editing awaits physical response validation on this firmware."
+                    });
                     for (index, control) in goxlr_types::DynamicsControl::ALL.into_iter().enumerate() {
                         let parameter = controls::dynamics_parameter(control);
+                        let editable = daemon::dynamics_control_verified(&device.firmware, control) && self.pending.is_none();
                         ui.horizontal(|ui| {
                             ui.label(&parameter.name).on_hover_text(parameter.meaning);
-                            ui.add_enabled(daemon::DYNAMICS_CONTROLS_VERIFIED && self.pending.is_none(),
+                            ui.add_enabled(editable,
                                 egui::DragValue::new(&mut self.dynamics[index]).range(control.range()));
                             ui.label(controls::dynamics_value(control, self.dynamics[index]));
-                            if ui.add_enabled(daemon::DYNAMICS_CONTROLS_VERIFIED && self.pending.is_none()
+                            if ui.add_enabled(editable
                                 && self.dynamics[index] != values[index], egui::Button::new("Apply")).clicked() {
                                 dynamics_edit = Some((index, self.dynamics[index]));
                             }
@@ -568,6 +574,7 @@ fn main() -> eframe::Result {
                 imported_preset: None,
                 preset_status: None,
                 mic_activity: activity::Activity::default(),
+                diagnostics: diagnostics::Diagnostics::default(),
                 detector_rate: 48_000,
                 mic_profile_selection: String::new(),
                 mic_profile_save_as: String::new(),

@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory)][string]$RecoveryReader,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$Firmware,
+    [string]$AuthorizedSha256,
     [string]$ValidationScript,
     [hashtable]$ValidationArguments = @{},
     [string]$OriginalDaemon = 'C:\Program Files\GoXLR Utility\goxlr-daemon.exe',
@@ -52,11 +53,22 @@ if ($Firmware) {
     $approvedImages = @{
         908 = 'C8607989063552E5A412AD3B29B4E1DB355D9B737DCC59D972A5349FBFAA970F'
         909 = '74555B3667DCB7150930AE544BDFCF732FEBF7BB6A0AA9B7CFD9B513FFA3C74B'
+        910 = 'B524AC6CF1B937E9C5D224CE9794E807E3B6561652B94DC6B26111FC9EF49744'
     }
     if ($image.Length -ne 640044 -or [Text.Encoding]::ASCII.GetString($image, 0, 14) -ne 'GoXLR Firmware' -or
         !$approvedImages.ContainsKey([int]$build) -or [BitConverter]::ToUInt32($image, 0x28) -ne 0xe897 -or
         (Get-FileHash -LiteralPath $Firmware).Hash -ne $approvedImages[[int]$build]) {
-        throw 'Expected an exact recorded 908 or 909 same-size image.'
+        throw 'Expected an exact recorded same-size image.'
+    }
+    if ($build -eq 910) {
+        $manifest = Get-Content -Encoding UTF8 -Raw (Join-Path $PSScriptRoot '../native-mic-eq/BUILD-910.json') | ConvertFrom-Json
+        if (!$manifest.flash_authorized -or $AuthorizedSha256 -ne $approvedImages[910] -or
+            $manifest.sha256 -ne $AuthorizedSha256 -or
+            (Get-FileHash $OriginalDaemon).Hash -ne $manifest.daemon_sha256 -or
+            (Get-FileHash $ResearchDaemon).Hash -ne $manifest.daemon_sha256 -or
+            ($mixer.hardware.versions.firmware -join '.') -ne '1.5.1.909') {
+            throw '910 requires its exact authorization, matching daemon and running 909 baseline; never retry an update automatically.'
+        }
     }
     if ($build -eq 909) {
         $manifest = Get-Content -Encoding UTF8 -Raw (Join-Path $PSScriptRoot '../native-mic-eq/BUILD-909.json') | ConvertFrom-Json

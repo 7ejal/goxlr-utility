@@ -24,14 +24,17 @@ function Send-Request($body) {
 $status = (Send-Request 'GetStatus').Status
 $devices = @($status.mixers.PSObject.Properties)
 if ($devices.Count -ne 1 -or $devices[0].Value.hardware.device_type -ne 'Full' -or
-    ($devices[0].Value.hardware.versions.firmware -join '.') -notin @('1.5.1.908','1.5.1.909')) {
-    throw 'Exactly one full-size GoXLR on experimental 908 or 909 is required.'
+    ($devices[0].Value.hardware.versions.firmware -join '.') -notin @('1.5.1.908','1.5.1.909','1.5.1.910')) {
+    throw 'Exactly one full-size GoXLR on experimental 908, 909 or 910 is required.'
 }
-if (($DynamicsRoundTrip -or $AllParametersRoundTrip) -and (!$NativeTestRunner -or ($devices[0].Value.hardware.versions.firmware -join '.') -ne '1.5.1.909')) {
-    throw 'Dynamics validation requires 909 and the explicitly supplied native test runner.'
+if (($DynamicsRoundTrip -or $AllParametersRoundTrip) -and (!$NativeTestRunner -or ($devices[0].Value.hardware.versions.firmware -join '.') -notin @('1.5.1.909','1.5.1.910'))) {
+    throw 'Dynamics validation requires 909/910 and the explicitly supplied native test runner.'
 }
 $device = $devices[0].Name
 $profileName = $devices[0].Value.mic_profile_name
+if (!(Test-Path -LiteralPath $OutputDirectory)) {
+    New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
+}
 function Read-Parameter($band, $field) {
     $reply = Send-Request @{ ReadMicEqParameter = @($device, $band, $field) }
     if ($null -eq $reply.MicEqParameter) { throw 'Missing DSP readback value.' }
